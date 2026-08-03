@@ -1,0 +1,69 @@
+name: Build Windows Desktop
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag matching src-tauri/tauri.conf.json (for example, v0.1.1)"
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate release tag
+        id: release
+        shell: pwsh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_TAG: ${{ github.ref_name }}
+          REQUESTED_TAG: ${{ inputs.release_tag }}
+        run: |
+          $config = Get-Content -Raw -Encoding utf8 src-tauri/tauri.conf.json | ConvertFrom-Json
+          $expectedTag = "v$($config.version)"
+          $releaseTag = if ($env:EVENT_NAME -eq "push") { $env:PUSH_TAG } else { $env:REQUESTED_TAG }
+
+          if ($releaseTag -ne $expectedTag) {
+            throw "Release tag '$releaseTag' does not match desktop version '$expectedTag'."
+          }
+
+          "tag=$releaseTag" >> $env:GITHUB_OUTPUT
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - run: python -m venv .venv
+      - run: pnpm install --frozen-lockfile
+      - run: .\.venv\Scripts\python.exe -m pip install -e ".[data,dev,desktop]"
+      - run: .\scripts\build-desktop.ps1 -SkipInstall
+      - uses: actions/upload-artifact@v4
+        with:
+          name: StockLLM-Windows-x64
+          path: packaging/dist/StockLLM_*_x64-setup.exe
+          if-no-files-found: error
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          name: StockLLM ${{ steps.release.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: packaging/dist/StockLLM_*_x64-setup.exe

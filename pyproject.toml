@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=80"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stockllm"
+version = "0.1.0"
+description = "Local-first A-share research assistant"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.116,<1",
+  "httpx>=0.28,<1",
+  "keyring>=25.6,<26",
+  "pydantic>=2.11,<3",
+  "uvicorn>=0.35,<1",
+]
+
+[project.optional-dependencies]
+data = [
+  "akshare>=1.17",
+  "baostock>=0.8.9",
+  "beautifulsoup4>=4.13,<5",
+  "polars>=1.32,<2",
+  "pyarrow>=25,<26",
+  "pypdf>=6,<7",
+]
+dev = [
+  "pytest>=8.4,<9",
+]
+desktop = [
+  "pyinstaller>=6.16,<7",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["backend"]
+testpaths = ["backend/tests"]
+
+[tool.setuptools.packages.find]
+where = ["backend"]
+include = ["stockllm*"]

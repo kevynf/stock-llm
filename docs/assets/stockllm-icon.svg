@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-24 -24 560 560" role="img" aria-labelledby="title">
+  <title id="title">StockLLM</title>
+  <style>
+    g { stroke: #18181b; }
+    @media (prefers-color-scheme: dark) { g { stroke: #fafafa; } }
+  </style>
+  <g fill="none" stroke-width="42" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M234 256L78 216C64 212 56 202 56 187V68C56 47 73 31 92 31H470C491 31 506 47 506 68V171C506 192 490 208 470 208H280"/>
+    <path d="M280 208L432 250C448 254 457 269 457 286V397C457 417 442 433 422 433H384V480L321 433H39C20 433 7 418 7 398V290C7 270 22 255 40 255H233"/>
+  </g>
+</svg>

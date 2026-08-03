@@ -1,0 +1,86 @@
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+.venv_build/
+venv/
+env/
+ENV/
+
+# Environment files
+.env
+
+# Packaging/build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+MANIFEST
+pip-wheel-metadata/
+packaging/dist/
+packaging/build/
+src-tauri/binaries/
+src-tauri/target/
+src-tauri/gen/
+
+# Installer/build outputs
+StockLLM-Portable.zip
+StockLLM.msi
+build_scripts/Output/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local agent tooling
+.agents/
+skills-lock.json
+
+# Streamlit
+.streamlit/
+
+# Testing/coverage
+.coverage
+coverage.xml
+.tox/
+.pytest_cache/
+.pip-cache/
+.uv-cache/
+.hypothesis/
+
+# Logs
+*.log
+.tmp/
+
+# Runtime cache/data
+cache/
+
+# Local application data
+.stockllm/
+user_data/
+
+# Frontend
+node_modules/
+.pnpm-store/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+
+# Test artifacts
+backend/tests/.test-data/
+stockllm-diagnostics-*.zip
+
