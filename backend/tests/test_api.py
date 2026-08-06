@@ -21,7 +21,7 @@ def test_provider_status_uses_provider_and_child_item_fields(monkeypatch) -> Non
         def source_statuses() -> list[dict]:
             return [{
                 "id": "akshare-sina-spot",
-                "provider": "AkShare",
+                "provider": "AKShare",
                 "name": "新浪财经 A 股行情",
                 "description": "全市场最新价格、涨跌幅与成交额",
                 "status": "available",
@@ -33,7 +33,7 @@ def test_provider_status_uses_provider_and_child_item_fields(monkeypatch) -> Non
     response = client.post("/api/v1/providers/status/check")
     assert response.status_code == 200
     item = response.json()[0]
-    assert item["provider"] == "AkShare"
+    assert item["provider"] == "AKShare"
     assert item["name"] == "新浪财经 A 股行情"
     assert "adapter" not in item
     assert "content" not in item
@@ -251,7 +251,7 @@ def test_stock_chat_uses_live_research_context_and_conversation_history(monkeypa
                 "name": "药明康德",
                 "price": 141.35,
                 "price_as_of": "2026-08-04",
-                "evidence_sources": {"price": "AkShare", "ma": "BaoStock"},
+                "evidence_sources": {"price": "AKShare", "ma": "BaoStock"},
             }
 
     captured: list[dict] = []
@@ -269,7 +269,7 @@ def test_stock_chat_uses_live_research_context_and_conversation_history(monkeypa
         json={"content": "价格来自哪里？", "skill": "verify_sources"},
     )
     assert first.status_code == 200
-    assert '"price": "AkShare"' in captured[0]["context"]
+    assert '"price": "AKShare"' in captured[0]["context"]
     assert captured[0]["history"] == []
 
     second = client.post(

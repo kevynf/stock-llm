@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Check, ChevronDown, Database, History, Play, ShieldCheck, Sparkles } from 'lucide-react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { api, eventUrl } from '../api'
 import type { Candidate, SelectionRun, StrategyId } from '../types'
 import { CandidateTable } from '../components/CandidateTable'
@@ -8,6 +9,7 @@ import { EmptyState } from '../components/EmptyState'
 import { ResearchChat } from '../components/ResearchChat'
 import { evidenceSourceDisplayName, FreshnessStatus, recommendationClassName, recommendationLabel, recommendationVariant, ResolutionStatus, semanticBadgeClassName, sourceDisplayNames, SourceStatus } from '../components/Status'
 import { formatDataDate, formatDataTime, formatEvidenceTime } from '@/lib/date'
+import { contentOffset, reducedFadeTransition, resultStagger, spatialSpring } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -45,7 +47,7 @@ function HistoricalConditions({ run }: { run: SelectionRun }) {
         <CardDescription className="break-words">{summary}</CardDescription>
         <CardAction><CollapsibleTrigger render={<Button variant="outline" size="sm" />}><ChevronDown data-icon="inline-start" className="transition-transform group-aria-expanded/button:rotate-180" />{open ? '收起' : '查看条件'}</CollapsibleTrigger></CardAction>
       </CardHeader>
-      <CollapsibleContent>
+      <CollapsibleContent className="h-(--collapsible-panel-height) overflow-hidden opacity-100 transition-[height,opacity,transform] duration-[260ms] ease-[cubic-bezier(0.16,1,0.3,1)] data-starting-style:h-0 data-starting-style:-translate-y-2 data-starting-style:opacity-0 data-ending-style:h-0 data-ending-style:-translate-y-2 data-ending-style:opacity-0 motion-reduce:transform-none motion-reduce:duration-120">
         <CardContent><Table><TableHeader><TableRow><TableHead>研究条件</TableHead><TableHead className="text-right">本次选择</TableHead></TableRow></TableHeader><TableBody>
           <TableRow><TableCell className="text-muted-foreground">风险承受</TableCell><TableCell className="text-right font-medium">{riskLabels[run.request.risk_profile]}</TableCell></TableRow>
           <TableRow><TableCell className="text-muted-foreground">投资周期</TableCell><TableCell className="text-right font-medium">{horizonLabels[run.request.horizon]}</TableCell></TableRow>
@@ -60,6 +62,7 @@ function HistoricalConditions({ run }: { run: SelectionRun }) {
 }
 
 export function SelectionWorkspace({ onOpenResearch, onOpenChats, onRunningChange, historicalRunId }: { onOpenResearch: (code: string) => void; onOpenChats: () => void; onRunningChange?: (running: boolean) => void; historicalRunId?: string }) {
+  const reduceMotion = useReducedMotion()
   const [risk, setRisk] = useState<SelectionRun['request']['risk_profile']>('balanced')
   const [horizon, setHorizon] = useState<SelectionRun['request']['horizon']>('medium')
   const [strategy, setStrategy] = useState<StrategyId>('trend')
@@ -135,10 +138,14 @@ export function SelectionWorkspace({ onOpenResearch, onOpenChats, onRunningChang
   }, [isRunning, onRunningChange])
   useEffect(() => () => onRunningChange?.(false), [onRunningChange])
 
-  return <div className={cn('selection-layout', (run || historicalRunId) && 'selection-layout-readonly')}>
-    {run ? <HistoricalConditions run={run} /> : historicalRunId
-      ? <Card className="selection-controls"><CardContent className="grid h-full place-items-center">{runQuery.isError ? <EmptyState title="无法打开历史报告" description={runQuery.error.message} /> : <Spinner />}</CardContent></Card>
-      : <Card className="selection-controls">
+  const readonly = Boolean(run || historicalRunId)
+
+  return <motion.div layout={!reduceMotion} transition={spatialSpring} className={cn('selection-layout', readonly && 'selection-layout-readonly')}>
+    <motion.div layout={!reduceMotion} transition={spatialSpring} className="selection-controls-stage">
+      <AnimatePresence initial={false} mode="popLayout">
+        {run ? <motion.div key="historical-conditions" initial={{ opacity: 0, y: reduceMotion ? 0 : -contentOffset }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={reduceMotion ? reducedFadeTransition : { y: spatialSpring, opacity: reducedFadeTransition }}><HistoricalConditions run={run} /></motion.div> : historicalRunId
+          ? <motion.div key="historical-loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={reducedFadeTransition}><Card className="selection-controls"><CardContent className="grid h-full place-items-center">{runQuery.isError ? <EmptyState title="无法打开历史报告" description={runQuery.error.message} /> : <Spinner />}</CardContent></Card></motion.div>
+          : <motion.div key="selection-form" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={reducedFadeTransition}><Card className="selection-controls">
       <CardHeader><CardTitle className="flex items-center gap-2"><ShieldCheck />研究条件</CardTitle><CardDescription>选择风险承受能力、投资周期和关注方向。</CardDescription></CardHeader>
       <CardContent className="min-h-0 flex-1 overflow-hidden"><ScrollArea className="h-full pr-3"><FieldGroup>
         <FieldSet><FieldLegend variant="label">风险承受</FieldLegend><ToggleGroup value={[risk]} onValueChange={(values) => values[0] && setRisk(values[0] as typeof risk)} className="w-full"><ToggleGroupItem value="conservative" className="flex-1">稳健</ToggleGroupItem><ToggleGroupItem value="balanced" className="flex-1">平衡</ToggleGroupItem><ToggleGroupItem value="active" className="flex-1">积极</ToggleGroupItem></ToggleGroup></FieldSet>
@@ -147,36 +154,49 @@ export function SelectionWorkspace({ onOpenResearch, onOpenChats, onRunningChang
         <FieldSet><FieldLegend variant="label">研究视角</FieldLegend><ToggleGroup value={[strategy]} onValueChange={(values) => values[0] && setStrategy(values[0] as StrategyId)} className="w-full"><ToggleGroupItem value="trend" className="flex-1">趋势</ToggleGroupItem><ToggleGroupItem value="quality" className="flex-1">质量</ToggleGroupItem><ToggleGroupItem value="stability" className="flex-1">平稳</ToggleGroupItem></ToggleGroup><FieldDescription>{selectedStrategy?.summary}</FieldDescription></FieldSet>
         <FieldSeparator />
         <Field><FieldLabel>数据模式</FieldLabel><Select items={dataModeOptions} value={dataMode} onValueChange={(value) => value && setDataMode(value as 'latest' | 'historical')}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{dataModeOptions.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectGroup></SelectContent></Select><FieldDescription>{dataMode === 'latest' ? '使用最新可核验的市场与财务数据，不保证盘中实时。' : '所有行情和已发布财报都会截断到所选研究日期。'}</FieldDescription></Field>
-        {dataMode === 'historical' ? <Field><FieldLabel htmlFor="research-date">研究日期</FieldLabel><Input id="research-date" type="date" value={asOf} max={new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)} onChange={(event) => setAsOf(event.currentTarget.value)} /></Field> : <Field><FieldLabel htmlFor="latest-research-date">研究日期</FieldLabel><Input id="latest-research-date" type="date" value={new Date().toISOString().slice(0, 10)} disabled readOnly /><FieldDescription>日期由数据源确认，研究完成后显示实际有效交易日。</FieldDescription></Field>}
+        <AnimatePresence initial={false} mode="popLayout">
+          {dataMode === 'historical'
+            ? <motion.div key="historical-date" layout={!reduceMotion} initial={{ opacity: 0, y: reduceMotion ? 0 : contentOffset }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: reduceMotion ? 0 : -contentOffset }} transition={reduceMotion ? reducedFadeTransition : { y: spatialSpring, opacity: reducedFadeTransition }}><Field><FieldLabel htmlFor="research-date">研究日期</FieldLabel><Input id="research-date" type="date" value={asOf} max={new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)} onChange={(event) => setAsOf(event.currentTarget.value)} /></Field></motion.div>
+            : <motion.div key="latest-date" layout={!reduceMotion} initial={{ opacity: 0, y: reduceMotion ? 0 : -contentOffset }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: reduceMotion ? 0 : contentOffset }} transition={reduceMotion ? reducedFadeTransition : { y: spatialSpring, opacity: reducedFadeTransition }}><Field><FieldLabel htmlFor="latest-research-date">研究日期</FieldLabel><Input id="latest-research-date" type="date" value={new Date().toISOString().slice(0, 10)} disabled readOnly /><FieldDescription>日期由数据源确认，研究完成后显示实际有效交易日。</FieldDescription></Field></motion.div>}
+        </AnimatePresence>
       </FieldGroup></ScrollArea></CardContent>
       <CardFooter><Button className="w-full" disabled={isRunning} onClick={() => createRun.mutate()}>{isRunning ? <Spinner data-icon="inline-start" /> : <Play data-icon="inline-start" />}开始研究</Button></CardFooter>
-      </Card>}
+          </Card></motion.div>}
+      </AnimatePresence>
+    </motion.div>
 
-    <div className="selection-results">
+    <motion.div layout={!reduceMotion} transition={spatialSpring} className="selection-results-stage">
+    <ScrollArea className="selection-results h-full">
+      <div className="selection-results-content">
       <Card>
         <CardContent className="flex flex-col gap-3">
           <Progress value={progress.value} getAriaValueText={() => progress.count}>
-            <ProgressLabel className="flex items-center gap-2">{isRunning ? <Spinner aria-label="研究进行中" /> : null}{progress.label}</ProgressLabel>
-            <ProgressValue>{() => progress.count}</ProgressValue>
+            <ProgressLabel className="flex items-center gap-2">{isRunning ? <Spinner aria-label="研究进行中" /> : null}<AnimatePresence initial={false} mode="popLayout"><motion.span key={progress.label} initial={{ opacity: 0, y: reduceMotion ? 0 : 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={reducedFadeTransition}>{progress.label}</motion.span></AnimatePresence></ProgressLabel>
+            <ProgressValue>{() => <AnimatePresence initial={false} mode="popLayout"><motion.span key={progress.count} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={reducedFadeTransition}>{progress.count}</motion.span></AnimatePresence>}</ProgressValue>
           </Progress>
-          {createRun.isPending ? <div className="flex min-w-0 flex-wrap items-center gap-2"><SourceStatus status="pending" /><span className="text-sm text-muted-foreground">正在建立新的研究任务</span></div> : run ? <div className="flex min-w-0 flex-wrap items-center gap-2"><SourceStatus status={run.provider.status} />{run.provider.status === 'pending' ? <span className="text-sm text-muted-foreground">正在获取研究数据</span> : <>{sourceDisplayNames(run.provider.source).map((source) => <Badge variant="outline" key={source}>{source}</Badge>)}<span className="text-sm text-muted-foreground">{run.provider.status === 'historical' ? `行情日期 ${formatDataDate(run.provider.as_of)}` : `价格获取于 ${formatEvidenceTime(run.provider.as_of, run.provider.fetched_at)}`}</span></>}</div> : null}
+          <AnimatePresence initial={false} mode="popLayout">
+            {createRun.isPending ? <motion.div key="creating" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={reducedFadeTransition} className="flex min-w-0 flex-wrap items-center gap-2"><SourceStatus status="pending" /><span className="text-sm text-muted-foreground">正在建立新的研究任务</span></motion.div> : run ? <motion.div key={`${run.id}-${run.provider.status}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={reducedFadeTransition} className="flex min-w-0 flex-wrap items-center gap-2"><SourceStatus status={run.provider.status} />{run.provider.status === 'pending' ? <span className="text-sm text-muted-foreground">正在获取研究数据</span> : <>{sourceDisplayNames(run.provider.source).map((source) => <Badge variant="outline" key={source}>{source}</Badge>)}<span className="text-sm text-muted-foreground">{run.provider.status === 'historical' ? `行情日期 ${formatDataDate(run.provider.as_of)}` : `价格获取于 ${formatEvidenceTime(run.provider.as_of, run.provider.fetched_at)}`}</span></>}</motion.div> : null}
+          </AnimatePresence>
         </CardContent>
       </Card>
 
-      {createRun.error ? <Alert variant="destructive"><AlertTriangle /><AlertTitle>研究未完成</AlertTitle><AlertDescription>{createRun.error.message}</AlertDescription></Alert> : null}
-      {!run ? <Card className="selection-empty"><CardContent><Empty><EmptyHeader><EmptyMedia variant="icon"><Sparkles /></EmptyMedia><EmptyTitle>还没有研究结果</EmptyTitle><EmptyDescription>完成左侧设置并开始研究后，候选股票和入选理由会显示在这里。</EmptyDescription></EmptyHeader></Empty></CardContent></Card> : null}
-      {run?.status === 'failed' ? <Card><CardContent><EmptyState title="本次研究未能完成" description={run.error ?? '请检查数据源状态后重试。'} /></CardContent></Card> : null}
+      <AnimatePresence initial={false} mode="popLayout">
+        {createRun.error ? <motion.div key="create-error" initial={{ opacity: 0, y: reduceMotion ? 0 : contentOffset }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={reduceMotion ? reducedFadeTransition : { y: spatialSpring, opacity: reducedFadeTransition }}><Alert variant="destructive"><AlertTriangle /><AlertTitle>研究未完成</AlertTitle><AlertDescription>{createRun.error.message}</AlertDescription></Alert></motion.div> : null}
+      </AnimatePresence>
+      <AnimatePresence initial={false} mode="popLayout">
+        {!run ? <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={reducedFadeTransition}><Card className="selection-empty"><CardContent><Empty><EmptyHeader><EmptyMedia variant="icon"><Sparkles /></EmptyMedia><EmptyTitle>还没有研究结果</EmptyTitle><EmptyDescription>完成左侧设置并开始研究后，候选股票和入选理由会显示在这里。</EmptyDescription></EmptyHeader></Empty></CardContent></Card></motion.div> : run.status === 'failed' ? <motion.div key="failed" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={reducedFadeTransition}><Card><CardContent><EmptyState title="本次研究未能完成" description={run.error ?? '请检查数据源状态后重试。'} /></CardContent></Card></motion.div> : null}
+      </AnimatePresence>
 
       {run?.status === 'complete' ? <>
-        <div className="summary-grid">
+        <motion.div initial={{ opacity: 0, y: reduceMotion ? 0 : contentOffset }} animate={{ opacity: 1, y: 0 }} transition={reduceMotion ? reducedFadeTransition : { ...spatialSpring, delay: 0 }} className="summary-grid">
           <Card><CardHeader><CardDescription>候选股票</CardDescription><CardTitle>{run.candidate_count}</CardTitle></CardHeader><CardContent className="text-sm text-muted-foreground">符合基础条件</CardContent></Card>
           <Card><CardHeader><CardDescription>已排除</CardDescription><CardTitle>{run.excluded_count}</CardTitle></CardHeader><CardContent className="text-sm text-muted-foreground">不符合基础条件</CardContent></Card>
           <Card><CardHeader><CardDescription>AI 状态</CardDescription><CardTitle>{run.ai_selection.status === 'complete' ? '已完成' : '未完成'}</CardTitle></CardHeader><CardContent className="text-sm text-muted-foreground">参考程度：{run.ai_selection.confidence === 'high' ? '高' : run.ai_selection.confidence === 'medium' ? '中' : '低'}</CardContent></Card>
-        </div>
+        </motion.div>
 
-        <Card><CardHeader><CardTitle>候选股票</CardTitle><CardDescription>选择一行查看入选理由和风险；展开后可查看每项检查结果。</CardDescription><CardAction><span className="whitespace-nowrap text-sm text-muted-foreground">{run.request.strategy === 'trend' ? '趋势' : run.request.strategy === 'quality' ? '质量' : '平稳'}</span></CardAction></CardHeader><CardContent><CandidateTable candidates={run.candidates} selectedCode={selected?.code} onSelect={setSelected} onResearch={onOpenResearch} /></CardContent></Card>
+        <motion.div initial={{ opacity: 0, y: reduceMotion ? 0 : contentOffset }} animate={{ opacity: 1, y: 0 }} transition={reduceMotion ? reducedFadeTransition : { ...spatialSpring, delay: resultStagger }}><Card><CardHeader><CardTitle>候选股票</CardTitle><CardDescription>选择一行查看入选理由和风险；展开后可查看每项检查结果。</CardDescription><CardAction><span className="whitespace-nowrap text-sm text-muted-foreground">{run.request.strategy === 'trend' ? '趋势' : run.request.strategy === 'quality' ? '质量' : '平稳'}</span></CardAction></CardHeader><CardContent><CandidateTable candidates={run.candidates} selectedCode={selected?.code} onSelect={setSelected} onResearch={onOpenResearch} /></CardContent></Card></motion.div>
 
-        <Tabs defaultValue="decision">
+        <motion.div initial={{ opacity: 0, y: reduceMotion ? 0 : contentOffset }} animate={{ opacity: 1, y: 0 }} transition={reduceMotion ? reducedFadeTransition : { ...spatialSpring, delay: resultStagger * 2 }}><Tabs defaultValue="decision">
           <TabsList><TabsTrigger value="decision">AI 结果</TabsTrigger><TabsTrigger value="evidence">数据来源</TabsTrigger><TabsTrigger value="risk">风险与缺失信息</TabsTrigger></TabsList>
           <TabsContent value="decision"><div className="decision-layout">
             <Card><CardHeader><CardDescription>{run.ai_selection.status === 'complete' ? 'AI 推荐' : '当前第一名'}</CardDescription><CardTitle>{preferred?.name ?? '暂无推荐'}</CardTitle><CardAction><Badge variant="outline" className={run.ai_selection.status === 'complete' ? semanticBadgeClassName.info : semanticBadgeClassName.muted}>{run.ai_selection.status === 'complete' ? 'AI 生成' : '仅规则'}</Badge></CardAction></CardHeader><CardContent className="flex flex-col gap-4">{preferred ? <><div className="flex min-w-0 items-center justify-between gap-3"><span className="font-mono text-sm text-muted-foreground">{preferred.code}</span><Badge variant={recommendationVariant[preferred.recommendation]} className={recommendationClassName[preferred.recommendation]}>{recommendationLabel[preferred.recommendation]}</Badge></div><p className="break-words text-sm text-muted-foreground">{preferred.reason}</p></> : <p className="break-words text-sm">{run.ai_selection.summary}</p>}<Table className="min-w-[640px]"><TableHeader><TableRow><TableHead className="w-16 text-center">排名</TableHead><TableHead>候选</TableHead><TableHead>建议</TableHead><TableHead>依据</TableHead></TableRow></TableHeader><TableBody>{run.ai_selection.top_three.map((item, index) => <TableRow key={item.code} onClick={() => setSelected(run.candidates.find((candidate) => candidate.code === item.code) ?? null)} className="cursor-pointer"><TableCell className="text-center tabular-nums">{index + 1}</TableCell><TableCell><div className="flex min-w-0 flex-col"><span className="font-medium">{item.name}</span><span className="font-mono text-xs text-muted-foreground">{item.code}</span></div></TableCell><TableCell><Badge variant={recommendationVariant[item.recommendation]} className={recommendationClassName[item.recommendation]}>{recommendationLabel[item.recommendation]}</Badge></TableCell><TableCell className="max-w-[28rem] whitespace-normal break-words text-muted-foreground">{item.reason}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>
@@ -188,8 +208,10 @@ export function SelectionWorkspace({ onOpenResearch, onOpenChats, onRunningChang
             { title: '重判条件', items: run.ai_selection.invalidation_signals, icon: AlertTriangle },
             { title: '数据缺口', items: run.ai_selection.data_gaps, icon: Database },
           ].map(({ title, items, icon: Icon }) => <Alert key={title} className="content-start items-start"><Icon /><AlertTitle className="flex min-w-0 items-center gap-2 whitespace-nowrap">{title}<Badge variant="outline" className={cn('shrink-0', run.ai_selection.status === 'complete' && semanticBadgeClassName.info)}>{run.ai_selection.status === 'complete' ? 'AI 生成' : '规则生成'}</Badge></AlertTitle><AlertDescription><ul className="flex min-w-0 list-disc flex-col gap-2 pl-4">{items.map((item) => <li className="break-words" key={item}>{item}</li>)}</ul></AlertDescription></Alert>)}</div></TabsContent>
-        </Tabs>
+        </Tabs></motion.div>
       </> : null}
-    </div>
-  </div>
+      </div>
+    </ScrollArea>
+    </motion.div>
+  </motion.div>
 }

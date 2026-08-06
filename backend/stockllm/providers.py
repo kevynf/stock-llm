@@ -169,8 +169,8 @@ class DemoProvider(ResearchProvider):
         }
 
 
-class AkShareProvider(ResearchProvider):
-    """Cached live universe from AkShare, enriched with BaoStock research data."""
+class AKShareProvider(ResearchProvider):
+    """Cached live universe from AKShare, enriched with BaoStock research data."""
 
     _baostock_lock = threading.Lock()
 
@@ -247,7 +247,7 @@ class AkShareProvider(ResearchProvider):
             frame = self.ak.stock_zh_a_spot()
             required = {"代码", "名称", "最新价", "涨跌幅", "昨收", "今开", "成交量", "成交额", "时间戳"}
             if frame.empty or not required.issubset(frame.columns):
-                raise ProviderUnavailable("AkShare 实时列表字段发生变化")
+                raise ProviderUnavailable("AKShare 实时列表字段发生变化")
             fetched_at = datetime.now(timezone.utc)
             with cache_write_lock():
                 frame.to_parquet(cache, index=False)
@@ -255,7 +255,7 @@ class AkShareProvider(ResearchProvider):
         except Exception as exc:
             if self._fresh(cache, timedelta(hours=24)):
                 return self.pd.read_parquet(cache), True, self._cache_time(cache)
-            raise ProviderUnavailable(f"AkShare 实时列表不可用：{exc}") from exc
+            raise ProviderUnavailable(f"AKShare 实时列表不可用：{exc}") from exc
 
     def _history(self, bs: object, code: str, as_of: date) -> tuple[list[dict], datetime, bool]:
         cache = self.cache_dir / f"history-{code}-{as_of.isoformat()}.parquet"
@@ -361,7 +361,7 @@ class AkShareProvider(ResearchProvider):
                     "published_at": published.isoformat(),
                     "publisher": str(record.get("文章来源") or "未注明").strip(),
                     "url": url,
-                    "source": "AkShare",
+                    "source": "AKShare",
                     "channel": "东方财富个股新闻",
                     "fetched_at": fetched_at.isoformat(),
                     "freshness": "latest",
@@ -392,7 +392,7 @@ class AkShareProvider(ResearchProvider):
                     "published_at": published.isoformat(),
                     "publisher": "巨潮资讯",
                     "url": url,
-                    "source": "AkShare",
+                    "source": "AKShare",
                     "channel": "巨潮资讯公告",
                     "fetched_at": fetched_at.isoformat(),
                     "freshness": "latest",
@@ -484,7 +484,7 @@ class AkShareProvider(ResearchProvider):
         spot_price = self._number(spot.get("最新价"))
         spot_change = self._number(spot.get("涨跌幅"))
         if spot_price is None or spot_change is None:
-            raise ProviderUnavailable("AkShare 最新价格或涨跌幅字段缺失")
+            raise ProviderUnavailable("AKShare 最新价格或涨跌幅字段缺失")
 
         market_date = date.fromisoformat(str(row["market_as_of"]))
         prior_close = self._number(spot.get("昨收"))
@@ -529,12 +529,12 @@ class AkShareProvider(ResearchProvider):
         same_date_conflict = observed_date == market_date and not same_quote
         row["price"] = spot_price
         row["change_pct"] = spot_change
-        source = "AkShare"
+        source = "AKShare"
         selected_date = observed_date
         selected_fetched_at = spot_fetched_at
         if same_date_conflict:
             resolution = "conflict"
-            note = "AkShare 行情与 BaoStock 当日日线收盘价不同；两条来源记录保持独立。"
+            note = "AKShare 行情与 BaoStock 当日日线收盘价不同；两条来源记录保持独立。"
         else:
             resolution = "primary"
             note = None
@@ -620,7 +620,7 @@ class AkShareProvider(ResearchProvider):
         if valid_count < 3 or not market_dates:
             raise ProviderUnavailable("真实数据补齐失败，可核验证券不足 3 只")
         return rows, SourceMeta(
-            source="AkShare · BaoStock",
+            source="AKShare · BaoStock",
             as_of=latest_price_date,
             fetched_at=max(price_fetched_times),
             status="cached" if from_cache else "live",
@@ -702,12 +702,12 @@ class AkShareProvider(ResearchProvider):
                 None,
             )
             if not spot:
-                raise ProviderUnavailable("AkShare 最新行情中未找到该证券")
+                raise ProviderUnavailable("AKShare 最新行情中未找到该证券")
             price_as_of, price_fetched_at = self._resolve_price(row, spot, spot_fetched_at, from_cache)
             row["source"] = SourceMeta(
                 source=" · ".join(dict.fromkeys(row["evidence_sources"].values())),
                 as_of=price_as_of, fetched_at=price_fetched_at,
-                status="cached" if from_cache or row["evidence_sources"]["price"] != "AkShare" else "live",
+                status="cached" if from_cache or row["evidence_sources"]["price"] != "AKShare" else "live",
             ).model_dump(mode="json")
         else:
             row["price_as_of"] = market_as_of.isoformat()
@@ -725,7 +725,7 @@ class AkShareProvider(ResearchProvider):
         row["content_scope"] = {"news": "最近 10 条", "notices": "研究日前 180 日"}
         row["content_errors"] = content_errors
         if content:
-            row["evidence_sources"]["news"] = "AkShare"
+            row["evidence_sources"]["news"] = "AKShare"
             row.setdefault("evidence_resolution", {})["news"] = {
                 "freshness": "cached" if content_from_cache else "latest",
                 "resolution": "primary",
@@ -751,7 +751,7 @@ class AkShareProvider(ResearchProvider):
                 message = f"在线探测成功，返回 {count} 条证券行情"
                 status = "available"
             statuses.append({
-                "id": "akshare-sina-spot", "provider": "AkShare",
+                "id": "akshare-sina-spot", "provider": "AKShare",
                 "name": "新浪财经 A 股行情",
                 "description": "全市场最新价格、涨跌幅与成交额",
                 "status": status,
@@ -759,7 +759,7 @@ class AkShareProvider(ResearchProvider):
             })
         except Exception as exc:
             statuses.append({
-                "id": "akshare-sina-spot", "provider": "AkShare",
+                "id": "akshare-sina-spot", "provider": "AKShare",
                 "name": "新浪财经 A 股行情",
                 "description": "全市场最新价格、涨跌幅与成交额",
                 "status": "unavailable",
@@ -785,14 +785,14 @@ class AkShareProvider(ResearchProvider):
                 with self.pd.option_context("mode.string_storage", "python"):
                     frame = probe()
                 statuses.append({
-                    "id": item_id, "provider": "AkShare", "name": name,
+                    "id": item_id, "provider": "AKShare", "name": name,
                     "description": description, "status": "available",
                     "message": f"在线探测成功，返回 {len(frame.index)} 条记录",
                     "checked_at": checked_at,
                 })
             except Exception as exc:
                 statuses.append({
-                    "id": item_id, "provider": "AkShare", "name": name,
+                    "id": item_id, "provider": "AKShare", "name": name,
                     "description": description, "status": "unavailable",
                     "message": str(exc), "checked_at": checked_at,
                 })
@@ -844,7 +844,7 @@ class AkShareProvider(ResearchProvider):
 
 def get_provider(mode: str) -> ResearchProvider:
     if mode == "live":
-        return AkShareProvider()
+        return AKShareProvider()
     if mode == "demo" and os.getenv("STOCKLLM_ENABLE_DEMO") == "1":
         return DemoProvider()
     raise ProviderUnavailable("示例数据仅限开发测试，用户研究必须使用可核验数据源")

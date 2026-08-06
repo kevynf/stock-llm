@@ -4,7 +4,7 @@ import pandas as pd
 
 from stockllm.engine import build_candidates, eligibility_reason
 from stockllm.models import StrategyId
-from stockllm.providers import AkShareProvider, DemoProvider
+from stockllm.providers import AKShareProvider, DemoProvider
 
 
 def reliable_spot(price: float, change_pct: float) -> dict:
@@ -33,7 +33,7 @@ def test_evidence_uses_field_level_sources() -> None:
     as_of = date(2026, 8, 1)
     rows, source = DemoProvider().snapshot(as_of)
     rows[0]["evidence_sources"] = {
-        "price": "AkShare",
+        "price": "AKShare",
         "ma": "BaoStock",
         "returns": "BaoStock",
         "liquidity": "BaoStock",
@@ -45,8 +45,8 @@ def test_evidence_uses_field_level_sources() -> None:
         evidence.id.rsplit(":", 1)[-1]: evidence.source
         for evidence in next(item for item in candidates if item.code == rows[0]["code"]).evidence
     }
-    assert evidence_sources["price"] == "AkShare"
-    assert set(evidence_sources.values()) == {"AkShare", "BaoStock"}
+    assert evidence_sources["price"] == "AKShare"
+    assert set(evidence_sources.values()) == {"AKShare", "BaoStock"}
 
 
 def test_evidence_uses_field_level_dates_and_resolution() -> None:
@@ -74,7 +74,7 @@ def test_evidence_uses_field_level_dates_and_resolution() -> None:
 
 
 def test_price_source_comes_from_the_selected_observation() -> None:
-    provider = object.__new__(AkShareProvider)
+    provider = object.__new__(AKShareProvider)
     row = {
         "price": 128.5,
         "change_pct": 0.05,
@@ -90,13 +90,13 @@ def test_price_source_comes_from_the_selected_observation() -> None:
     )
     assert selected_date == date(2026, 8, 4)
     assert row["price"] == 141.35
-    assert row["evidence_sources"]["price"] == "AkShare"
+    assert row["evidence_sources"]["price"] == "AKShare"
     assert row["evidence_resolution"]["price"]["resolution"] == "conflict"
     assert row["evidence_resolution"]["price"]["freshness"] == "latest"
 
 
 def test_price_source_is_not_reassigned_when_another_source_is_newer() -> None:
-    provider = object.__new__(AkShareProvider)
+    provider = object.__new__(AKShareProvider)
     row = {
         "price": 141.35,
         "change_pct": 10.0,
@@ -112,13 +112,13 @@ def test_price_source_is_not_reassigned_when_another_source_is_newer() -> None:
     )
     assert selected_date == date(2026, 8, 3)
     assert row["price"] == 128.5
-    assert row["evidence_sources"]["price"] == "AkShare"
+    assert row["evidence_sources"]["price"] == "AKShare"
     assert row["evidence_resolution"]["price"]["resolution"] == "primary"
     assert row["evidence_resolution"]["price"]["freshness"] == "cached"
 
 
 def test_price_resolution_keeps_primary_source_when_same_date_and_value() -> None:
-    provider = object.__new__(AkShareProvider)
+    provider = object.__new__(AKShareProvider)
     row = {
         "price": 141.35,
         "change_pct": 10.0,
@@ -133,14 +133,14 @@ def test_price_resolution_keeps_primary_source_when_same_date_and_value() -> Non
         True,
     )
     assert selected_date == date(2026, 8, 4)
-    assert row["evidence_sources"]["price"] == "AkShare"
+    assert row["evidence_sources"]["price"] == "AKShare"
     assert row["evidence_resolution"]["price"] == {
         "freshness": "cached", "resolution": "primary", "note": None,
     }
 
 
 def test_zero_change_without_valid_opening_trade_uses_last_effective_daily_price() -> None:
-    provider = object.__new__(AkShareProvider)
+    provider = object.__new__(AKShareProvider)
     row = {
         "price": 141.35,
         "change_pct": 5.0,
@@ -165,7 +165,7 @@ def test_zero_change_without_valid_opening_trade_uses_last_effective_daily_price
 
 
 def test_research_content_keeps_source_semantics_and_respects_as_of(tmp_path) -> None:
-    class StubAkShare:
+    class StubAKShare:
         @staticmethod
         def stock_news_em(symbol: str) -> pd.DataFrame:
             assert symbol == "603259"
@@ -190,8 +190,8 @@ def test_research_content_keeps_source_semantics_and_respects_as_of(tmp_path) ->
                 "公告链接": "https://example.com/notice",
             }])
 
-    provider = object.__new__(AkShareProvider)
-    provider.ak = StubAkShare()
+    provider = object.__new__(AKShareProvider)
+    provider.ak = StubAKShare()
     provider.pd = pd
     provider.cache_dir = tmp_path
 
@@ -200,7 +200,7 @@ def test_research_content_keeps_source_semantics_and_respects_as_of(tmp_path) ->
     assert errors == []
     assert [item["kind"] for item in items] == ["新闻", "公告"]
     assert [item["content_level"] for item in items] == ["summary", "title"]
-    assert all(item["source"] == "AkShare" for item in items)
+    assert all(item["source"] == "AKShare" for item in items)
     assert items[0]["publisher"] == "证券时报网"
     assert items[1]["publisher"] == "巨潮资讯"
     assert all(item["published_at"][:10] <= "2026-08-05" for item in items)

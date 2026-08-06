@@ -2,6 +2,7 @@ import { StrictMode, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RotateCcwIcon, TriangleAlertIcon } from 'lucide-react'
+import { MotionConfig } from 'motion/react'
 import { App } from './App'
 import { api, HealthContractError, initializeRuntime, restartBackend, validateHealth } from './api'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -71,9 +72,11 @@ function renderApp() {
   root.render(
     <StrictMode>
       <QueryClientProvider client={queryClient}>
-        <TooltipProvider delay={0} closeDelay={0}>
-          <App />
-        </TooltipProvider>
+        <MotionConfig reducedMotion="user">
+          <TooltipProvider delay={0} closeDelay={0}>
+            <App />
+          </TooltipProvider>
+        </MotionConfig>
       </QueryClientProvider>
     </StrictMode>,
   )

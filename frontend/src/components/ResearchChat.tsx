@@ -1,6 +1,7 @@
 import { FormEvent, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bot, CornerUpLeft, KeyRound, Maximize2, MessagesSquare, Minimize2, Send, Wrench } from 'lucide-react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { api } from '../api'
 import type { ChatSession } from '../types'
 import { MarkdownMessage } from './MarkdownMessage'
@@ -16,6 +17,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
 import { cn } from '@/lib/utils'
+import { contentOffset, fadeInTransition, reducedFadeTransition, spatialSpring } from '@/lib/motion'
 
 export function ResearchChat({
   runId,
@@ -33,6 +35,7 @@ export function ResearchChat({
   className?: string
 }) {
   const queryClient = useQueryClient()
+  const reduceMotion = useReducedMotion()
   const [fullScreen, setFullScreen] = useState(false)
   const [selectedChatId, setSelectedChatId] = useState<string | null>(initialChatId ?? null)
   const [content, setContent] = useState('')
@@ -83,7 +86,7 @@ export function ResearchChat({
   const conversation = <>
     {!aiReady ? <Alert><KeyRound /><AlertDescription>在“设置”中保存并测试 DeepSeek 密钥后即可提问。</AlertDescription></Alert> : null}
     <ScrollArea className="min-h-0 flex-1">
-      {chatPending ? <div className="grid h-full place-items-center"><Spinner /></div> : chat?.messages.length ? <div className={cn('mx-auto flex w-full min-w-0 flex-col gap-2 px-4 py-2', fullScreen ? 'max-w-[90rem]' : 'max-w-5xl')}>{chat.messages.map((message) => <Card key={message.id} size="sm" className={cn('w-fit min-w-0', fullScreen ? 'max-w-[min(88%,64rem)]' : 'max-w-[min(82%,48rem)]', message.role === 'user' ? 'self-end' : 'self-start')}><CardContent className="min-w-0 max-w-full">{message.role === 'assistant' ? <div className="flex min-w-0 max-w-full flex-col gap-2"><Badge variant="outline" className={`self-start ${semanticBadgeClassName.info}`}>AI 生成</Badge><MarkdownMessage content={message.content} /></div> : <p className="whitespace-pre-wrap break-words text-sm leading-6">{message.content}</p>}{message.tool_traces.length ? <p className="mt-2 flex min-w-0 max-w-full flex-wrap items-center gap-1 break-words text-xs text-muted-foreground"><Wrench className="shrink-0" />{message.tool_traces.join(' · ')}</p> : null}</CardContent></Card>)}</div> : <Empty className="h-full"><EmptyHeader><EmptyMedia variant="icon"><Bot /></EmptyMedia><EmptyTitle>有问题可以继续问</EmptyTitle><EmptyDescription>AI 会根据当前研究数据和应用已读取的原文回答，并标明缺失或截断的信息。</EmptyDescription></EmptyHeader><EmptyContent><Button variant="outline" onClick={() => create.mutate()} disabled={create.isPending || chatPending || !aiReady || Boolean(selectedChatId)}>{create.isPending ? <Spinner data-icon="inline-start" /> : null}开始对话</Button></EmptyContent></Empty>}
+      {chatPending ? <div className="grid h-full place-items-center"><Spinner /></div> : chat?.messages.length ? <div className={cn('mx-auto flex w-full min-w-0 flex-col gap-2 px-4 py-2', fullScreen ? 'max-w-[90rem]' : 'max-w-5xl')}><AnimatePresence initial={false}>{chat.messages.map((message) => <motion.div key={message.id} layout="position" initial={{ opacity: 0, x: reduceMotion ? 0 : message.role === 'user' ? contentOffset : -contentOffset }} animate={{ opacity: 1, x: 0 }} transition={reduceMotion ? reducedFadeTransition : { x: spatialSpring, opacity: fadeInTransition }} className={cn('w-fit min-w-0', fullScreen ? 'max-w-[min(88%,64rem)]' : 'max-w-[min(82%,48rem)]', message.role === 'user' ? 'self-end' : 'self-start')}><Card size="sm" className="min-w-0"><CardContent className="min-w-0 max-w-full">{message.role === 'assistant' ? <div className="flex min-w-0 max-w-full flex-col gap-2"><Badge variant="outline" className={`self-start ${semanticBadgeClassName.info}`}>AI 生成</Badge><MarkdownMessage content={message.content} /></div> : <p className="whitespace-pre-wrap break-words text-sm leading-6">{message.content}</p>}{message.tool_traces.length ? <p className="mt-2 flex min-w-0 max-w-full flex-wrap items-center gap-1 break-words text-xs text-muted-foreground"><Wrench className="shrink-0" />{message.tool_traces.join(' · ')}</p> : null}</CardContent></Card></motion.div>)}</AnimatePresence></div> : <Empty className="h-full"><EmptyHeader><EmptyMedia variant="icon"><Bot /></EmptyMedia><EmptyTitle>有问题可以继续问</EmptyTitle><EmptyDescription>AI 会根据当前研究数据和应用已读取的原文回答，并标明缺失或截断的信息。</EmptyDescription></EmptyHeader><EmptyContent><Button variant="outline" onClick={() => create.mutate()} disabled={create.isPending || chatPending || !aiReady || Boolean(selectedChatId)}>{create.isPending ? <Spinner data-icon="inline-start" /> : null}开始对话</Button></EmptyContent></Empty>}
     </ScrollArea>
   </>
 
@@ -109,7 +112,7 @@ export function ResearchChat({
         <CardContent className="flex min-h-0 flex-1 flex-col gap-3">{conversation}</CardContent>
         <CardFooter className="shrink-0">{composer}</CardFooter>
       </Card> : null}
-      <DialogContent showCloseButton={false} className="inset-0 top-0 left-0 flex h-svh w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none p-0 ring-inset sm:max-w-none">
+      <DialogContent showCloseButton={false} className="inset-0 top-0 left-0 flex h-svh w-screen max-w-none origin-top-right translate-x-0 translate-y-0 flex-col gap-0 rounded-none p-0 ring-inset duration-[240ms] data-open:zoom-in-98 data-closed:zoom-out-98 data-open:slide-in-from-top-2 data-open:slide-in-from-right-2 data-closed:slide-out-to-top-2 data-closed:slide-out-to-right-2 motion-reduce:transform-none motion-reduce:duration-120 sm:max-w-none">
         <DialogHeader className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] gap-x-4 border-b p-4 text-left">
           <div className="flex min-w-0 flex-col gap-1">
             <DialogTitle className="flex items-center gap-2"><Bot />研究对话</DialogTitle>

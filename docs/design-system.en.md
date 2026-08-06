@@ -1,6 +1,6 @@
 # StockLLM Design System
 
-[English](design-system.en.md) · [简体中文](design-system.md)
+[简体中文](design-system.md) | [English](design-system.en.md)
 
 StockLLM is a desktop-first personal investment research tool. Its interface is stable, compact, scannable, and traceable; it does not imitate a professional quantitative-trading terminal.
 

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft,
   Database,
@@ -12,6 +12,7 @@ import {
   Star,
   X,
 } from 'lucide-react'
+import { AnimatePresence, motion, useAnimationControls, useReducedMotion } from 'motion/react'
 import { Button } from '@/components/ui/button'
 import {
   Sidebar,
@@ -29,6 +30,17 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar'
 import { Spinner } from '@/components/ui/spinner'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  contentOffset,
+  departingPageOffset,
+  fadeInTransition,
+  fadeOutTransition,
+  pageOffset,
+  reducedFadeTransition,
+  spatialSpring,
+  type NavigationIntent,
+} from '@/lib/motion'
 import type { ViewId } from './types'
 
 const SelectionWorkspace = lazy(() => import('./pages/SelectionWorkspace').then((module) => ({ default: module.SelectionWorkspace })))
@@ -49,7 +61,79 @@ const navigation = [
   { id: 'settings' as const, label: '设置', subtitle: '设置 DeepSeek 模型和 API 密钥。', icon: Settings },
 ]
 
-const pageContentClass = 'page-content h-full w-full overflow-auto px-4 pb-4'
+function PageView({ active, departing, intent, revision, children }: {
+  active: boolean
+  departing: boolean
+  intent: NavigationIntent
+  revision: number
+  children: React.ReactNode
+}) {
+  const controls = useAnimationControls()
+  const reduceMotion = useReducedMotion()
+  const activeRef = useRef(active)
+  const hiddenRef = useRef(!active)
+
+  useEffect(() => {
+    activeRef.current = active
+  }, [active])
+
+  useEffect(() => {
+    const entryX = reduceMotion || intent === 'replace' ? 0 : intent === 'push' ? pageOffset : -pageOffset
+    const entryY = reduceMotion || intent !== 'replace' ? 0 : contentOffset
+    const exitX = reduceMotion || intent === 'replace' ? 0 : intent === 'push' ? -departingPageOffset : departingPageOffset
+    const exitScale = reduceMotion || intent === 'replace' ? 1 : 0.985
+    const visibleTransition = reduceMotion
+      ? reducedFadeTransition
+      : { x: spatialSpring, y: spatialSpring, scale: spatialSpring, opacity: fadeInTransition }
+
+    if (active) {
+      if (hiddenRef.current) {
+        controls.set({ opacity: 0, x: entryX, y: entryY, scale: 1, visibility: 'visible' })
+      }
+      hiddenRef.current = false
+      void controls.start({ opacity: 1, x: 0, y: 0, scale: 1, visibility: 'visible', transition: visibleTransition })
+      return
+    }
+
+    if (departing) {
+      void controls.start({
+        opacity: 0,
+        x: exitX,
+        scale: exitScale,
+        transition: reduceMotion ? reducedFadeTransition : { x: spatialSpring, scale: spatialSpring, opacity: fadeOutTransition },
+      }).then(() => {
+        if (!activeRef.current) {
+          hiddenRef.current = true
+          controls.set({ visibility: 'hidden' })
+        }
+      })
+      return
+    }
+
+    if (hiddenRef.current) controls.set({ opacity: 0, x: 0, y: 0, scale: 1, visibility: 'hidden' })
+  }, [active, controls, departing, intent, reduceMotion, revision])
+
+  return (
+    <motion.div
+      animate={controls}
+      initial={{
+        opacity: 0,
+        x: active && !reduceMotion && intent !== 'replace' ? intent === 'push' ? pageOffset : -pageOffset : 0,
+        y: active && !reduceMotion && intent === 'replace' ? contentOffset : 0,
+        scale: 1,
+        visibility: active ? 'visible' : 'hidden',
+      }}
+      inert={!active}
+      aria-hidden={!active}
+      className="absolute inset-0 min-h-0 min-w-0 overflow-hidden"
+      style={{ pointerEvents: active ? 'auto' : 'none' }}
+    >
+      <ScrollArea className="h-full w-full">
+        <div className="page-content min-h-full w-full px-4 pb-4">{children}</div>
+      </ScrollArea>
+    </motion.div>
+  )
+}
 
 function SidebarToggleButton() {
   const { state, toggleSidebar } = useSidebar()
@@ -68,29 +152,52 @@ function SidebarToggleButton() {
 }
 
 export function App() {
-  const [view, setView] = useState<ViewId>('selection')
+  const [{ view, previousView, intent, revision }, setNavigation] = useState<{
+    view: ViewId
+    previousView: ViewId | null
+    intent: NavigationIntent
+    revision: number
+  }>({ view: 'selection', previousView: null, intent: 'replace', revision: 0 })
   const [openViews, setOpenViews] = useState<Set<ViewId>>(() => new Set(['selection']))
   const [selectionKey, setSelectionKey] = useState(0)
   const [selectionRunning, setSelectionRunning] = useState(false)
   const [researchCode, setResearchCode] = useState('600519')
   const [historyRunId, setHistoryRunId] = useState<string | null>(null)
+  const closeTimersRef = useRef(new Map<ViewId, number>())
+  const reduceMotion = useReducedMotion()
   const currentView = view === 'history-report'
     ? { label: '历史报告', subtitle: '查看当次保存的条件、候选、证据和结论。' }
     : navigation.find((item) => item.id === view) ?? navigation[0]
 
-  const navigate = useCallback((nextView: ViewId) => {
+  useEffect(() => () => {
+    closeTimersRef.current.forEach((timer) => window.clearTimeout(timer))
+  }, [])
+
+  const navigate = useCallback((nextView: ViewId, nextIntent: NavigationIntent = 'replace') => {
+    const pendingClose = closeTimersRef.current.get(nextView)
+    if (pendingClose !== undefined) {
+      window.clearTimeout(pendingClose)
+      closeTimersRef.current.delete(nextView)
+    }
     setOpenViews((current) => current.has(nextView) ? current : new Set(current).add(nextView))
-    setView(nextView)
+    setNavigation((current) => current.view === nextView
+      ? current
+      : {
+          view: nextView,
+          previousView: current.view,
+          intent: nextIntent,
+          revision: current.revision + 1,
+        })
   }, [])
 
   const openResearch = useCallback((code: string) => {
     setResearchCode(code)
-    navigate('research')
+    navigate('research', 'push')
   }, [navigate])
 
   const openHistoryRun = useCallback((runId: string) => {
     setHistoryRunId(runId)
-    navigate('history-report')
+    navigate('history-report', 'push')
   }, [navigate])
 
   const openChats = useCallback(() => navigate('chats'), [navigate])
@@ -101,26 +208,27 @@ export function App() {
       setSelectionKey((current) => current + 1)
       return
     }
-    setOpenViews((current) => {
-      const next = new Set(current)
-      next.delete(view)
-      if (view === 'history-report') next.add('history')
-      return next
-    })
+    const closingView = view
+    const targetView: ViewId = view === 'history-report' ? 'history' : 'selection'
+    navigate(targetView, view === 'history-report' ? 'pop' : 'replace')
     if (view === 'research') setResearchCode('600519')
-    if (view === 'history-report') {
-      setHistoryRunId(null)
-      setView('history')
-      return
-    }
-    setView('selection')
-  }, [selectionRunning, view])
+    const timer = window.setTimeout(() => {
+      setOpenViews((current) => {
+        const next = new Set(current)
+        next.delete(closingView)
+        return next
+      })
+      if (closingView === 'history-report') setHistoryRunId(null)
+      closeTimersRef.current.delete(closingView)
+    }, reduceMotion ? 140 : 360)
+    closeTimersRef.current.set(closingView, timer)
+  }, [navigate, reduceMotion, selectionRunning, view])
 
   const closeBlocked = view === 'selection' && selectionRunning
 
   return (
     <SidebarProvider className="h-svh min-h-0 overflow-hidden">
-      <Sidebar collapsible="icon">
+      <Sidebar collapsible="icon" className="sidebar-motion">
         <SidebarHeader className="h-20 px-2 py-4">
           <SidebarMenu className="gap-2">
             <SidebarMenuItem>
@@ -167,7 +275,7 @@ export function App() {
             <SidebarMenuItem>
               <SidebarMenuButton tooltip="研究结论不构成投资建议">
                 <Info />
-                <span>结论需结合来源与个人判断</span>
+                <span>时刻注意投资风险</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
@@ -177,23 +285,36 @@ export function App() {
       <SidebarInset className="h-full min-h-0 min-w-0 overflow-hidden">
         <header className="flex h-16 shrink-0 items-center gap-2 px-4">
           <SidebarTrigger className="md:hidden" aria-label="打开侧栏" title="打开侧栏" />
-          {view === 'history-report' ? <Button variant="ghost" size="icon" onClick={() => navigate('history')} aria-label="返回历史研究"><ArrowLeft /></Button> : null}
-          <div className="flex min-w-0 items-baseline gap-3">
-            <h1 className="shrink-0 text-base font-medium">{currentView.label}</h1>
-            <p className="truncate text-sm text-muted-foreground">{currentView.subtitle}</p>
+          <AnimatePresence initial={false}>
+            {view === 'history-report' ? <motion.div key="history-back" initial={{ opacity: 0, x: reduceMotion ? 0 : 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduceMotion ? 0 : 8 }} transition={reduceMotion ? reducedFadeTransition : spatialSpring}><Button variant="ghost" size="icon" onClick={() => navigate('history', 'pop')} aria-label="返回历史研究"><ArrowLeft /></Button></motion.div> : null}
+          </AnimatePresence>
+          <div className="relative min-w-0 flex-1 overflow-hidden">
+            <AnimatePresence initial={false} mode="popLayout">
+              <motion.div
+                key={view}
+                initial={{ opacity: 0, x: reduceMotion || intent === 'replace' ? 0 : intent === 'push' ? 8 : -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0 }}
+                transition={reduceMotion ? reducedFadeTransition : { x: spatialSpring, opacity: fadeInTransition }}
+                className="flex min-w-0 items-baseline gap-3"
+              >
+                <h1 className="shrink-0 text-base font-medium">{currentView.label}</h1>
+                <p className="truncate text-sm text-muted-foreground">{currentView.subtitle}</p>
+              </motion.div>
+            </AnimatePresence>
           </div>
           <Button className="ml-auto" variant="ghost" size="icon" onClick={closeCurrentView} disabled={closeBlocked} aria-label={closeBlocked ? '研究进行中，无法关闭' : '关闭当前页面'} title={closeBlocked ? '研究完成后才能关闭' : '关闭当前页面'}><X /></Button>
         </header>
-        <main className="min-h-0 flex-1 overflow-hidden">
+        <main className="relative min-h-0 flex-1 overflow-hidden">
           <Suspense fallback={<div className="grid h-full place-items-center"><Spinner /></div>}>
-            {openViews.has('selection') ? <div className={view === 'selection' ? pageContentClass : 'hidden'}><SelectionWorkspace key={selectionKey} onOpenResearch={openResearch} onOpenChats={openChats} onRunningChange={setSelectionRunning} /></div> : null}
-            {openViews.has('history') ? <div className={view === 'history' ? pageContentClass : 'hidden'}><HistoryPage onOpenRun={openHistoryRun} /></div> : null}
-            {openViews.has('history-report') && historyRunId ? <div className={view === 'history-report' ? pageContentClass : 'hidden'}><SelectionWorkspace key={historyRunId} onOpenResearch={openResearch} onOpenChats={openChats} historicalRunId={historyRunId} /></div> : null}
-            {openViews.has('research') ? <div className={view === 'research' ? pageContentClass : 'hidden'}><StockResearchPage initialCode={researchCode} onOpenChats={openChats} /></div> : null}
-            {openViews.has('chats') ? <div className={view === 'chats' ? pageContentClass : 'hidden'}><ChatsPage /></div> : null}
-            {openViews.has('watchlist') ? <div className={view === 'watchlist' ? pageContentClass : 'hidden'}><WatchlistPage onOpenResearch={openResearch} /></div> : null}
-            {openViews.has('providers') ? <div className={view === 'providers' ? pageContentClass : 'hidden'}><ProvidersPage /></div> : null}
-            {openViews.has('settings') ? <div className={view === 'settings' ? pageContentClass : 'hidden'}><SettingsPage /></div> : null}
+            {openViews.has('selection') ? <PageView active={view === 'selection'} departing={previousView === 'selection'} intent={intent} revision={revision}><SelectionWorkspace key={selectionKey} onOpenResearch={openResearch} onOpenChats={openChats} onRunningChange={setSelectionRunning} /></PageView> : null}
+            {openViews.has('history') ? <PageView active={view === 'history'} departing={previousView === 'history'} intent={intent} revision={revision}><HistoryPage onOpenRun={openHistoryRun} /></PageView> : null}
+            {openViews.has('history-report') && historyRunId ? <PageView active={view === 'history-report'} departing={previousView === 'history-report'} intent={intent} revision={revision}><SelectionWorkspace key={historyRunId} onOpenResearch={openResearch} onOpenChats={openChats} historicalRunId={historyRunId} /></PageView> : null}
+            {openViews.has('research') ? <PageView active={view === 'research'} departing={previousView === 'research'} intent={intent} revision={revision}><StockResearchPage initialCode={researchCode} onOpenChats={openChats} /></PageView> : null}
+            {openViews.has('chats') ? <PageView active={view === 'chats'} departing={previousView === 'chats'} intent={intent} revision={revision}><ChatsPage /></PageView> : null}
+            {openViews.has('watchlist') ? <PageView active={view === 'watchlist'} departing={previousView === 'watchlist'} intent={intent} revision={revision}><WatchlistPage onOpenResearch={openResearch} /></PageView> : null}
+            {openViews.has('providers') ? <PageView active={view === 'providers'} departing={previousView === 'providers'} intent={intent} revision={revision}><ProvidersPage /></PageView> : null}
+            {openViews.has('settings') ? <PageView active={view === 'settings'} departing={previousView === 'settings'} intent={intent} revision={revision}><SettingsPage /></PageView> : null}
           </Suspense>
         </main>
       </SidebarInset>

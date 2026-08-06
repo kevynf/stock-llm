@@ -3,6 +3,7 @@ import remarkBreaks from 'remark-breaks'
 import remarkGfm from 'remark-gfm'
 
 import { Separator } from '@/components/ui/separator'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 
@@ -16,7 +17,7 @@ const markdownComponents: Components = {
   li: ({ children }) => <li className="break-words pl-1">{children}</li>,
   blockquote: ({ children }) => <blockquote className="border-l-2 border-border pl-3 text-muted-foreground">{children}</blockquote>,
   a: ({ children, href }) => <a className="break-all text-primary underline underline-offset-4" href={href} target="_blank" rel="noreferrer">{children}</a>,
-  pre: ({ children }) => <pre className="max-w-full overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs leading-5">{children}</pre>,
+  pre: ({ children }) => <ScrollArea scrollbars="horizontal" className="max-w-full rounded-md bg-muted pb-2.5"><pre className="w-max min-w-full p-3 font-mono text-xs leading-5">{children}</pre></ScrollArea>,
   code: ({ children, className }) => <code className={cn('rounded bg-muted px-1 py-0.5 font-mono text-xs', className)}>{children}</code>,
   table: ({ children }) => <Table className="min-w-[32rem]">{children}</Table>,
   thead: ({ children }) => <TableHeader className="bg-muted/50">{children}</TableHeader>,

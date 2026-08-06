@@ -40,7 +40,7 @@ class ModelGateway:
     def config(self) -> dict:
         return {
             "base_url": self.db.get_setting("model.base_url", "https://api.deepseek.com"),
-            "model": self.db.get_setting("model.name", "deepseek-chat"),
+            "model": self.db.get_setting("model.name", "deepseek-v4-flash"),
         }
 
     def _chat(self, messages: list[dict], json_mode: bool = False) -> str:

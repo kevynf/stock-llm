@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowUpRight, CircleAlert, Plus, Star, Trash2 } from 'lucide-react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { api } from '../api'
 import type { WatchlistItem } from '../types'
 import { EmptyState } from '../components/EmptyState'
@@ -24,6 +25,7 @@ import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { contentOffset, reducedFadeTransition, spatialSpring } from '@/lib/motion'
 
 const legacyKey = 'stockllm.watchlist'
 
@@ -44,6 +46,7 @@ function readLegacyWatchlist(): Array<Pick<WatchlistItem, 'code' | 'name' | 'not
 }
 
 export function WatchlistPage({ onOpenResearch }: { onOpenResearch: (code: string) => void }) {
+  const reduceMotion = useReducedMotion()
   const queryClient = useQueryClient()
   const [code, setCode] = useState('')
   const [deleteCodes, setDeleteCodes] = useState<string[] | null>(null)
@@ -86,7 +89,7 @@ export function WatchlistPage({ onOpenResearch }: { onOpenResearch: (code: strin
 
   return <div className="flex flex-col gap-4">
     <Card>
-      <CardHeader><CardTitle className="flex items-center gap-2"><Star />自选股</CardTitle><CardDescription>保存在本机 SQLite 中，行情与财务数据仍按需读取。</CardDescription>{selection.selected.size ? <CardAction><div className="flex items-center gap-2"><span className="whitespace-nowrap text-sm text-muted-foreground tabular-nums">已选 {selection.selected.size} 项</span><Button variant="destructive" size="sm" onClick={() => setDeleteCodes([...selection.selected])}><Trash2 data-icon="inline-start" />批量移除</Button></div></CardAction> : null}</CardHeader>
+      <CardHeader><CardTitle className="flex items-center gap-2"><Star />自选股</CardTitle><CardDescription>保存在本机 SQLite 中，行情与财务数据仍按需读取。</CardDescription><CardAction><AnimatePresence initial={false}>{selection.selected.size ? <motion.div key="bulk-actions" initial={{ opacity: 0, y: reduceMotion ? 0 : -contentOffset }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: reduceMotion ? 0 : -contentOffset }} transition={reduceMotion ? reducedFadeTransition : { y: spatialSpring, opacity: reducedFadeTransition }} className="flex items-center gap-2"><span className="whitespace-nowrap text-sm text-muted-foreground tabular-nums">已选 {selection.selected.size} 项</span><Button variant="destructive" size="sm" onClick={() => setDeleteCodes([...selection.selected])}><Trash2 data-icon="inline-start" />批量移除</Button></motion.div> : null}</AnimatePresence></CardAction></CardHeader>
       <CardContent className="flex flex-col gap-4">
         <form onSubmit={submit}>
           <FieldGroup>

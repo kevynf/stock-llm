@@ -154,7 +154,7 @@ class DiagnosticsExportInput(BaseModel):
 
 class ModelConfigInput(BaseModel):
     base_url: HttpUrl = "https://api.deepseek.com"
-    model: str = "deepseek-chat"
+    model: str = "deepseek-v4-flash"
     api_key: str | None = Field(default=None, min_length=8)
 
 

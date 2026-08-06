@@ -266,9 +266,9 @@ def _check_provider_status() -> list[dict]:
         statuses.extend(provider.source_statuses())
     except ProviderUnavailable as exc:
         statuses.extend([
-            {"id": "akshare-sina-spot", "provider": "AkShare", "name": "新浪财经 A 股行情", "description": "全市场最新价格、涨跌幅与成交额", "status": "unavailable", "message": str(exc)},
-            {"id": "akshare-eastmoney-news", "provider": "AkShare", "name": "东方财富个股新闻", "description": "个股相关新闻、发布时间、发布机构与原文链接", "status": "unavailable", "message": str(exc)},
-            {"id": "akshare-cninfo-notices", "provider": "AkShare", "name": "巨潮资讯公告", "description": "上市公司公告、公告日期与原文链接", "status": "unavailable", "message": str(exc)},
+            {"id": "akshare-sina-spot", "provider": "AKShare", "name": "新浪财经 A 股行情", "description": "全市场最新价格、涨跌幅与成交额", "status": "unavailable", "message": str(exc)},
+            {"id": "akshare-eastmoney-news", "provider": "AKShare", "name": "东方财富个股新闻", "description": "个股相关新闻、发布时间、发布机构与原文链接", "status": "unavailable", "message": str(exc)},
+            {"id": "akshare-cninfo-notices", "provider": "AKShare", "name": "巨潮资讯公告", "description": "上市公司公告、公告日期与原文链接", "status": "unavailable", "message": str(exc)},
             {"id": "baostock-daily", "provider": "BaoStock", "name": "A 股日线行情", "description": "开盘、最高、最低、收盘、成交量与估值字段", "status": "unavailable", "message": str(exc)},
             {"id": "baostock-industry", "provider": "BaoStock", "name": "行业分类", "description": "证券所属行业", "status": "unavailable", "message": str(exc)},
             {"id": "baostock-financial", "provider": "BaoStock", "name": "已发布财务数据", "description": "盈利、成长、资产负债与现金流数据", "status": "unavailable", "message": str(exc)},

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CalendarDays, CircleAlert, Eye, History, Trash2 } from 'lucide-react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { api } from '../api'
 import { EmptyState } from '../components/EmptyState'
 import { SourceStatus } from '../components/Status'
@@ -23,8 +24,10 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Spinner } from '@/components/ui/spinner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { contentOffset, reducedFadeTransition, spatialSpring } from '@/lib/motion'
 
 export function HistoryPage({ onOpenRun }: { onOpenRun: (runId: string) => void }) {
+  const reduceMotion = useReducedMotion()
   const queryClient = useQueryClient()
   const [deleteRunIds, setDeleteRunIds] = useState<string[] | null>(null)
   const runs = useQuery({ queryKey: ['runs'], queryFn: api.runs })
@@ -40,7 +43,7 @@ export function HistoryPage({ onOpenRun }: { onOpenRun: (runId: string) => void 
 
   return <div className="flex flex-col gap-4">
     {runs.data?.length ? <Card>
-      <CardHeader><CardTitle>研究记录</CardTitle><CardDescription>这里保存每次研究使用的数据和结果。</CardDescription>{selection.selected.size ? <CardAction><div className="flex items-center gap-2"><span className="whitespace-nowrap text-sm text-muted-foreground tabular-nums">已选 {selection.selected.size} 项</span><Button variant="destructive" size="sm" onClick={() => setDeleteRunIds([...selection.selected])}><Trash2 data-icon="inline-start" />批量删除</Button></div></CardAction> : null}</CardHeader>
+      <CardHeader><CardTitle>研究记录</CardTitle><CardDescription>这里保存每次研究使用的数据和结果。</CardDescription><CardAction><AnimatePresence initial={false}>{selection.selected.size ? <motion.div key="bulk-actions" initial={{ opacity: 0, y: reduceMotion ? 0 : -contentOffset }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: reduceMotion ? 0 : -contentOffset }} transition={reduceMotion ? reducedFadeTransition : { y: spatialSpring, opacity: reducedFadeTransition }} className="flex items-center gap-2"><span className="whitespace-nowrap text-sm text-muted-foreground tabular-nums">已选 {selection.selected.size} 项</span><Button variant="destructive" size="sm" onClick={() => setDeleteRunIds([...selection.selected])}><Trash2 data-icon="inline-start" />批量删除</Button></motion.div> : null}</AnimatePresence></CardAction></CardHeader>
       <CardContent><Table className="min-w-[720px]">
         <TableHeader><TableRow><TableHead className="w-10"><Checkbox aria-label="选择全部研究记录" checked={selection.allSelected} indeterminate={selection.someSelected} onCheckedChange={selection.toggleAll} /></TableHead><TableHead>首位候选</TableHead><TableHead>研究视角</TableHead><TableHead className="text-right">候选数</TableHead><TableHead>数据状态</TableHead><TableHead>研究日期</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
         <TableBody>{runs.data.map((run) => { const preferred = run.ai_selection.top_three[0]; return <TableRow key={run.id}>

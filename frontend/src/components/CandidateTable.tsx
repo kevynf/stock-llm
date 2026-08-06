@@ -1,15 +1,18 @@
 import { Fragment, useMemo, useState } from 'react'
 import { createColumnHelper, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import { ArrowUpRight, ChevronDown, ChevronUp } from 'lucide-react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { Button } from '@/components/ui/button'
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { contentOffset, disclosureSpring, reducedFadeTransition } from '@/lib/motion'
 import type { Candidate } from '../types'
 import { CheckStatus } from './Status'
 
 const column = createColumnHelper<Candidate>()
+const MotionTableRow = motion.create(TableRow)
 
 export function CandidateTable({ candidates, selectedCode, onSelect, onResearch }: {
   candidates: Candidate[]
@@ -18,6 +21,7 @@ export function CandidateTable({ candidates, selectedCode, onSelect, onResearch 
   onResearch: (code: string) => void
 }) {
   const [expanded, setExpanded] = useState<string | null>(null)
+  const reduceMotion = useReducedMotion()
   const columns = useMemo(() => [
     column.display({ id: 'rank', header: () => <span className="block text-center">排名</span>, cell: (info) => <span className="block text-center tabular-nums">{info.row.index + 1}</span> }),
     column.accessor('name', { header: '股票', cell: (info) => <div className="flex max-w-48 min-w-0 flex-col"><span className="truncate font-medium" title={info.getValue()}>{info.getValue()}</span><span className="truncate font-mono text-xs text-muted-foreground" title={`${info.row.original.code} · ${info.row.original.sector}`}>{info.row.original.code} · {info.row.original.sector}</span></div> }),
@@ -37,13 +41,14 @@ export function CandidateTable({ candidates, selectedCode, onSelect, onResearch 
       <Table className="min-w-[760px]">
         <TableHeader>{table.getHeaderGroups().map((group) => <TableRow key={group.id}>{group.headers.map((header) => <TableHead key={header.id}>{flexRender(header.column.columnDef.header, header.getContext())}</TableHead>)}</TableRow>)}</TableHeader>
         <TableBody>{table.getRowModel().rows.map((row) => <Fragment key={row.id}>
-          <TableRow data-state={selectedCode === row.original.code ? 'selected' : undefined} onClick={() => onSelect(row.original)} className="cursor-pointer">
+          <MotionTableRow layout="position" transition={{ layout: disclosureSpring }} data-state={selectedCode === row.original.code ? 'selected' : undefined} onClick={() => onSelect(row.original)} className="cursor-pointer">
             {row.getVisibleCells().map((cell) => <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>)}
-          </TableRow>
-          {expanded === row.original.code ? <TableRow><TableCell colSpan={7} className="whitespace-normal"><div className="candidate-checks">{row.original.checks.map((check) => <div key={check.label} className="flex min-w-0 items-start gap-2"><CheckStatus state={check.state} /><div className="flex min-w-0 flex-col gap-1"><span className="font-medium">{check.label}</span><span className="break-words text-sm text-muted-foreground">{check.reason}</span></div></div>)}</div></TableCell></TableRow> : null}
+          </MotionTableRow>
+          <AnimatePresence initial={false}>
+            {expanded === row.original.code ? <MotionTableRow layout transition={{ layout: disclosureSpring }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><TableCell colSpan={7} className="whitespace-normal"><motion.div initial={{ height: 0, y: reduceMotion ? 0 : -contentOffset }} animate={{ height: 'auto', y: 0 }} exit={{ height: 0, y: reduceMotion ? 0 : -contentOffset }} transition={reduceMotion ? reducedFadeTransition : disclosureSpring} className="overflow-hidden"><div className="candidate-checks">{row.original.checks.map((check) => <div key={check.label} className="flex min-w-0 items-start gap-2"><CheckStatus state={check.state} /><div className="flex min-w-0 flex-col gap-1"><span className="font-medium">{check.label}</span><span className="break-words text-sm text-muted-foreground">{check.reason}</span></div></div>)}</div></motion.div></TableCell></MotionTableRow> : null}
+          </AnimatePresence>
         </Fragment>)}</TableBody>
       </Table>
-      <ScrollBar orientation="horizontal" />
     </ScrollArea>
   )
 }

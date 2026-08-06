@@ -31,7 +31,7 @@ export function ProvidersPage() {
       <CardContent>
         {error ? <Alert variant="destructive"><AlertTitle>数据源状态暂时无法更新</AlertTitle><AlertDescription>{error.message}</AlertDescription></Alert> : null}
         {providers.isPending ? <div className="grid min-h-40 place-items-center"><Spinner /></div> : null}
-        {providers.isSuccess && providers.data.length === 0 ? <Empty><EmptyHeader><EmptyMedia variant="icon"><Database /></EmptyMedia><EmptyTitle>尚未检查数据源</EmptyTitle><EmptyDescription>点击“重新检查”后，程序才会连接 AkShare 和 BaoStock。</EmptyDescription></EmptyHeader></Empty> : null}
+        {providers.isSuccess && providers.data.length === 0 ? <Empty><EmptyHeader><EmptyMedia variant="icon"><Database /></EmptyMedia><EmptyTitle>尚未检查数据源</EmptyTitle><EmptyDescription>点击“重新检查”后，程序才会连接 AKShare 和 BaoStock。</EmptyDescription></EmptyHeader></Empty> : null}
         {providers.data?.length ? <Table className="min-w-[920px]">
           <TableHeader><TableRow><TableHead>提供方</TableHead><TableHead>数据项目</TableHead><TableHead>状态</TableHead><TableHead>测试结果</TableHead><TableHead>上次检查</TableHead></TableRow></TableHeader>
           <TableBody>{providers.data.map((item) => <TableRow key={item.id}>

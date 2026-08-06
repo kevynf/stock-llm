@@ -1,6 +1,6 @@
 # StockLLM 界面设计系统
 
-[English](design-system.en.md) · [简体中文](design-system.md)
+[简体中文](design-system.md) | [English](design-system.en.md)
 
 StockLLM 是桌面优先的个人投资研究工具。界面强调稳定、紧凑、可扫描和可追溯，不模拟专业量化终端。
 

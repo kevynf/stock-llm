@@ -38,7 +38,7 @@ function saveBlob(blob: Blob, filename: string) {
 function ModelSettings() {
   const config = useQuery({ queryKey: ['model-config'], queryFn: api.modelConfig })
   const [baseUrl, setBaseUrl] = useState('https://api.deepseek.com')
-  const [model, setModel] = useState('deepseek-chat')
+  const [model, setModel] = useState('deepseek-v4-flash')
   const [apiKey, setApiKey] = useState('')
   useEffect(() => {
     if (config.data) { setBaseUrl(config.data.base_url); setModel(config.data.model) }
@@ -52,7 +52,7 @@ function ModelSettings() {
   return <Card>
     <CardHeader>
       <CardTitle className="flex items-center gap-2"><KeyRound />DeepSeek</CardTitle>
-      <CardDescription>配置研究分析使用的模型服务。</CardDescription>
+      <CardDescription>使用 OpenAI 兼容的 Chat Completions 格式配置研究分析模型。</CardDescription>
       <CardAction><AIConnectionStatus configured={Boolean(config.data?.key_configured)} status={config.data?.connection_status} /></CardAction>
     </CardHeader>
     <form onSubmit={submit} className="contents">
