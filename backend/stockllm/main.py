@@ -37,7 +37,7 @@ async def lifespan(_: FastAPI):
 
 db = Database()
 service = ResearchService(db)
-app = FastAPI(title="StockLLM API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="StockLLM API", version="0.1.2", lifespan=lifespan)
 API_PROTOCOL_VERSION = 1
 API_CAPABILITIES = [
     "desktop-session-token",

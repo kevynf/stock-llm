@@ -19,7 +19,7 @@ from typing import Iterator, Literal
 from .db import Database, data_dir
 
 
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.1.2"
 LOG_MAX_BYTES = 2 * 1024 * 1024
 LOG_BACKUP_COUNT = 5
 StorageScope = Literal["market", "external_links", "logs"]

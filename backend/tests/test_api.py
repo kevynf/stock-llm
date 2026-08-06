@@ -466,7 +466,7 @@ def test_desktop_token_is_required_except_for_health(monkeypatch) -> None:
     assert health.status_code == 200
     assert health.json() == {
         "status": "ok",
-        "version": "0.1.0",
+        "version": "0.1.2",
         "protocol_version": 1,
         "capabilities": [
             "desktop-session-token",
