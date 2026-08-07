@@ -1,6 +1,6 @@
 [package]
 name = "stockllm-desktop"
-version = "0.1.2"
+version = "0.2.0"
 description = "StockLLM Windows desktop shell"
 authors = ["StockLLM"]
 edition = "2021"

@@ -2,14 +2,9 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from .models import (
-    Candidate,
-    CheckState,
-    Evidence,
-    ResearchCheck,
-    StrategyDefinition,
-    StrategyId,
-)
+from .models.common import CheckState, StrategyId
+from .models.market import StrategyDefinition
+from .models.research import Candidate, Evidence, ResearchCheck
 
 
 STRATEGIES = [

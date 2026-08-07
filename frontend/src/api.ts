@@ -1,4 +1,25 @@
-import type { ChatSession, ChatSummary, SelectionRun, StockResearch, Strategy, WatchlistItem } from './types'
+import type {
+  BatchDeleteResponse,
+  ChatSession,
+  ChatSummary,
+  DeleteResponse,
+  HealthStatus,
+  LogEntry,
+  LogLevelView,
+  ModelConfigInput,
+  ModelConfigView,
+  ModelTestResponse,
+  ProviderCheck,
+  SelectionRun,
+  SkillDefinition,
+  StorageScope,
+  StorageStatistics,
+  StockResearch,
+  StockSearchResult,
+  Strategy,
+  SystemDiagnostics,
+  WatchlistItem,
+} from './types'
 
 type RuntimeConfig = {
   mode: 'browser' | 'desktop'
@@ -7,16 +28,25 @@ type RuntimeConfig = {
 }
 
 let runtime: RuntimeConfig = { mode: 'browser', api_origin: '', token: null }
+let runtimeInitialization: Promise<RuntimeConfig> | null = null
 
 const API_PROTOCOL_VERSION = 1
 const REQUIRED_CAPABILITIES = ['desktop-session-token', 'selection-events', 'system-diagnostics'] as const
 const DEFAULT_TIMEOUT_MS = 30_000
 
-export async function initializeRuntime() {
-  if (!('__TAURI_INTERNALS__' in window)) return runtime
-  const { invoke } = await import('@tauri-apps/api/core')
-  runtime = await invoke<RuntimeConfig>('runtime_config')
-  return runtime
+export function initializeRuntime() {
+  if (!('__TAURI_INTERNALS__' in window)) return Promise.resolve(runtime)
+  if (!runtimeInitialization) {
+    runtimeInitialization = (async () => {
+      const { invoke } = await import('@tauri-apps/api/core')
+      runtime = await invoke<RuntimeConfig>('runtime_config')
+      return runtime
+    })().catch((error) => {
+      runtimeInitialization = null
+      throw error
+    })
+  }
+  return runtimeInitialization
 }
 
 export async function restartBackend() {
@@ -26,14 +56,16 @@ export async function restartBackend() {
 }
 
 function requestUrl(path: string) {
-  return `${runtime.api_origin}${path}`
+  const normalizedPath = `/${path.replace(/^\/+/, '')}`
+  const origin = runtime.api_origin.trim().replace(/\/+$/, '')
+  return origin ? `${origin}${normalizedPath}` : normalizedPath
 }
 
 function runtimeHeaders(headers?: HeadersInit) {
-  return {
-    ...(runtime.token ? { 'X-StockLLM-Token': runtime.token } : {}),
-    ...headers,
-  }
+  const result = new Headers(headers)
+  if (!result.has('Content-Type')) result.set('Content-Type', 'application/json')
+  if (runtime.token) result.set('X-StockLLM-Token', runtime.token)
+  return result
 }
 
 export function eventUrl(path: string) {
@@ -46,16 +78,6 @@ export async function openDataDirectory() {
   if (runtime.mode !== 'desktop') throw new Error('此操作仅在桌面应用中可用。')
   const { invoke } = await import('@tauri-apps/api/core')
   await invoke('open_data_directory')
-}
-
-export type ProviderCheck = {
-  id: string
-  provider: string
-  name: string
-  description: string
-  status: 'available' | 'cached' | 'unavailable'
-  message: string
-  checked_at?: string
 }
 
 const httpErrorMessages: Record<number, string> = {
@@ -92,6 +114,7 @@ async function errorMessage(response: Response) {
 async function request<T>(path: string, init?: RequestInit, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
   let response: Response
   const controller = new AbortController()
+  if (init?.signal?.aborted) controller.abort()
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs)
   const abort = () => controller.abort()
   init?.signal?.addEventListener('abort', abort, { once: true })
@@ -99,7 +122,7 @@ async function request<T>(path: string, init?: RequestInit, timeoutMs = DEFAULT_
     response = await fetch(requestUrl(path), {
       ...init,
       signal: controller.signal,
-      headers: runtimeHeaders({ 'Content-Type': 'application/json', ...init?.headers }),
+      headers: runtimeHeaders(init?.headers),
     })
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
@@ -125,7 +148,7 @@ async function download(path: string, body: unknown, timeoutMs = 120_000): Promi
     const response = await fetch(requestUrl(path), {
       method: 'POST',
       signal: controller.signal,
-      headers: runtimeHeaders({ 'Content-Type': 'application/json' }),
+      headers: runtimeHeaders(),
       body: JSON.stringify(body),
     })
     if (!response.ok) throw new Error(await errorMessage(response))
@@ -143,13 +166,6 @@ async function download(path: string, body: unknown, timeoutMs = 120_000): Promi
   }
 }
 
-export type HealthStatus = {
-  status: string
-  version: string
-  protocol_version: number
-  capabilities: string[]
-}
-
 export class HealthContractError extends Error {}
 
 export function validateHealth(health: HealthStatus) {
@@ -163,25 +179,25 @@ export function validateHealth(health: HealthStatus) {
 
 export const api = {
   health: (timeoutMs = 5_000) => request<HealthStatus>('/api/v1/health', undefined, timeoutMs),
-  strategies: () => request<Strategy[]>('/api/v1/strategies'),
-  runs: () => request<SelectionRun[]>('/api/v1/selection-runs'),
-  run: (id: string) => request<SelectionRun>(`/api/v1/selection-runs/${id}`),
-  deleteRun: (id: string) => request<{ status: string }>(`/api/v1/selection-runs/${id}`, {
+  strategies: (signal?: AbortSignal) => request<Strategy[]>('/api/v1/strategies', signal ? { signal } : undefined),
+  runs: (signal?: AbortSignal) => request<SelectionRun[]>('/api/v1/selection-runs', signal ? { signal } : undefined),
+  run: (id: string, signal?: AbortSignal) => request<SelectionRun>(`/api/v1/selection-runs/${id}`, signal ? { signal } : undefined),
+  deleteRun: (id: string) => request<DeleteResponse>(`/api/v1/selection-runs/${id}`, {
     method: 'DELETE',
   }),
-  deleteRuns: (ids: string[]) => request<{ status: string; deleted: number }>('/api/v1/selection-runs/batch-delete', {
+  deleteRuns: (ids: string[]) => request<BatchDeleteResponse>('/api/v1/selection-runs/batch-delete', {
     method: 'POST', body: JSON.stringify({ ids }),
   }),
   createRun: (input: SelectionRun['request']) => request<SelectionRun>('/api/v1/selection-runs', {
     method: 'POST', body: JSON.stringify(input),
   }),
   stock: (code: string, asOf?: string, dataMode: 'demo' | 'live' = 'live') => request<StockResearch>(
-    `/api/v1/stocks/${code}/research?data_mode=${dataMode}${asOf ? `&as_of=${asOf}` : ''}`,
+    `/api/v1/stocks/${encodeURIComponent(code.trim())}/research?${new URLSearchParams({ data_mode: dataMode, ...(asOf ? { as_of: asOf } : {}) })}`,
     undefined,
     120_000,
   ),
-  searchStocks: (query: string, dataMode: 'demo' | 'live' = 'live') => request<Array<{ code: string; name: string; sector: string }>>(
-    `/api/v1/stocks/search?q=${encodeURIComponent(query)}&data_mode=${dataMode}`,
+  searchStocks: (query: string, dataMode: 'demo' | 'live' = 'live') => request<StockSearchResult[]>(
+    `/api/v1/stocks/search?${new URLSearchParams({ q: query.trim(), data_mode: dataMode })}`,
   ),
   providers: () => request<ProviderCheck[]>('/api/v1/providers/status'),
   checkProviders: () => request<ProviderCheck[]>('/api/v1/providers/status/check', { method: 'POST' }, 120_000),
@@ -195,35 +211,40 @@ export const api = {
   updateWatchlist: (code: string, note: string) => request<WatchlistItem>(`/api/v1/watchlist/${code}`, {
     method: 'PUT', body: JSON.stringify({ note }),
   }),
-  deleteWatchlist: (code: string) => request<{ status: string }>(`/api/v1/watchlist/${code}`, { method: 'DELETE' }),
-  deleteWatchlistItems: (ids: string[]) => request<{ status: string; deleted: number }>('/api/v1/watchlist/batch-delete', {
+  deleteWatchlist: (code: string) => request<DeleteResponse>(`/api/v1/watchlist/${code}`, { method: 'DELETE' }),
+  deleteWatchlistItems: (ids: string[]) => request<BatchDeleteResponse>('/api/v1/watchlist/batch-delete', {
     method: 'POST', body: JSON.stringify({ ids }),
   }),
-  modelConfig: () => request<{ provider: string; base_url: string; model: string; key_configured: boolean; connection_status: 'connected' | 'disconnected' }>('/api/v1/models/config'),
-  saveModelConfig: (input: { base_url: string; model: string; api_key?: string }) => request('/api/v1/models/config', {
+  modelConfig: () => request<ModelConfigView>('/api/v1/models/config'),
+  saveModelConfig: (input: ModelConfigInput) => request<ModelConfigView>('/api/v1/models/config', {
     method: 'POST', body: JSON.stringify(input),
   }),
-  testModel: () => request<{ status: string; message: string }>('/api/v1/models/test', { method: 'POST' }, 120_000),
+  testModel: () => request<ModelTestResponse>('/api/v1/models/test', { method: 'POST' }, 120_000),
   storage: () => request<StorageStatistics>('/api/v1/system/storage'),
   clearStorage: (scopes: StorageScope[]) => request<StorageStatistics>('/api/v1/system/storage/clear', {
     method: 'POST', body: JSON.stringify({ scopes }),
   }),
   diagnostics: () => request<SystemDiagnostics>('/api/v1/system/diagnostics'),
-  logs: (level?: string) => request<LogEntry[]>(`/api/v1/system/logs?limit=200${level ? `&level=${level}` : ''}`),
+  logs: (level?: string) => {
+    const query = new URLSearchParams({ limit: '200' })
+    if (level) query.set('level', level)
+    return request<LogEntry[]>(`/api/v1/system/logs?${query}`)
+  },
   reportClientLog: (input: { level: 'info' | 'warning' | 'error'; event: string; message: string; location?: string }) =>
     request<void>('/api/v1/system/logs/client', { method: 'POST', body: JSON.stringify(input) }),
-  setLogLevel: (level: 'normal' | 'detailed') => request<{ level: 'normal' | 'detailed' }>('/api/v1/system/log-level', {
+  setLogLevel: (level: 'normal' | 'detailed') => request<LogLevelView>('/api/v1/system/log-level', {
     method: 'POST', body: JSON.stringify({ level }),
   }),
   exportDiagnostics: (detail: 'basic' | 'detailed') => download('/api/v1/system/diagnostics/export', { detail }),
-  skills: () => request<Array<{ id: string; name: string; tools: string[]; description: string }>>('/api/v1/skills'),
+  skills: () => request<SkillDefinition[]>('/api/v1/skills'),
   chats: () => request<ChatSummary[]>('/api/v1/chats?limit=500'),
   chat: (chatId: string) => request<ChatSession>(`/api/v1/chats/${chatId}`),
   latestChat: (runId?: string, stockCode?: string) => {
     const query = new URLSearchParams()
     if (runId) query.set('run_id', runId)
     if (stockCode) query.set('stock_code', stockCode)
-    return request<ChatSession | null>(`/api/v1/chats/latest?${query}`)
+    const suffix = query.toString()
+    return request<ChatSession | null>(`/api/v1/chats/latest${suffix ? `?${suffix}` : ''}`)
   },
   createChat: (runId?: string, stockCode?: string) => request<ChatSession>('/api/v1/chats', {
     method: 'POST', body: JSON.stringify({ run_id: runId, stock_code: stockCode }),
@@ -232,34 +253,7 @@ export const api = {
     method: 'POST', body: JSON.stringify({ content, skill }),
   }, 180_000),
   deleteChat: (chatId: string) => request<void>(`/api/v1/chats/${chatId}`, { method: 'DELETE' }),
-  deleteChats: (ids: string[]) => request<{ status: string; deleted: number }>('/api/v1/chats/batch-delete', {
+  deleteChats: (ids: string[]) => request<BatchDeleteResponse>('/api/v1/chats/batch-delete', {
     method: 'POST', body: JSON.stringify({ ids }),
   }),
-}
-
-export type StorageScope = 'market' | 'external_links' | 'logs'
-export type StorageStatistics = {
-  categories: Array<{ scope: StorageScope; label: string; file_count: number; bytes: number }>
-  temporary_bytes: number
-}
-export type LogEntry = {
-  timestamp: string
-  level: string
-  component: string
-  event: string
-  message: string
-  request_id?: string
-  duration_ms?: number
-  status_code?: number
-}
-export type SystemDiagnostics = {
-  app_version: string
-  python_version: string
-  platform: string
-  architecture: string
-  runtime: 'browser' | 'desktop'
-  data_directory: string
-  log_level: 'normal' | 'detailed'
-  storage: StorageStatistics
-  connections: { model: string; providers_checked: string }
 }

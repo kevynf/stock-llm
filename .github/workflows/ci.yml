@@ -21,6 +21,8 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pip install -e ".[dev]"
+      - run: python -m json.tool src-tauri/tauri.conf.json > /dev/null
       - run: pytest
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter stockllm-frontend run api:check
       - run: pnpm --filter stockllm-frontend run build

@@ -9,6 +9,17 @@ if (!Number.isInteger(frontendPort) || frontendPort < 1 || frontendPort > 65_535
   throw new Error('STOCKLLM_DEV_FRONTEND_PORT must be a valid TCP port.')
 }
 
+function vendorChunkName(id: string) {
+  if (!id.includes('/node_modules/')) return undefined
+  if (id.includes('/node_modules/@base-ui/') || id.includes('/node_modules/lucide-react/')) return 'ui-vendor'
+  if (id.includes('/node_modules/react/') || id.includes('/node_modules/react-dom/') || id.includes('/node_modules/scheduler/')) return 'react-vendor'
+  if (id.includes('/@tanstack/')) return 'query-vendor'
+  if (id.includes('/motion/') || id.includes('/motion-dom/')) return 'motion-vendor'
+  if (id.includes('/lightweight-charts/')) return 'charts-vendor'
+  if (id.includes('/react-markdown/') || id.includes('/remark-') || id.includes('/micromark') || id.includes('/unified/')) return 'markdown-vendor'
+  return undefined
+}
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   optimizeDeps: {
@@ -17,6 +28,13 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: vendorChunkName,
+      },
     },
   },
   server: {

@@ -99,12 +99,12 @@ export function StockResearchPage({ initialCode, onOpenChats }: { initialCode: s
               {data.news.length ? <Table>
                 <TableHeader><TableRow><TableHead>类型</TableHead><TableHead>标题</TableHead><TableHead>发布机构</TableHead><TableHead>发布时间</TableHead><TableHead>来源</TableHead><TableHead className="w-12"><span className="sr-only">查看</span></TableHead></TableRow></TableHeader>
                 <TableBody>{data.news.map((item) => <TableRow key={`${item.published_at}-${item.url}`}>
-                  <TableCell className="whitespace-nowrap"><div className="flex flex-col"><span>{item.kind}</span><span className="text-xs text-muted-foreground">{item.content_level === 'summary' ? '摘要' : '仅标题'}</span></div></TableCell>
+                  <TableCell className="whitespace-nowrap"><div className="flex flex-col"><span>{item.kind ?? '资讯'}</span><span className="text-xs text-muted-foreground">{item.content_level === 'summary' || item.summary ? '摘要' : '仅标题'}</span></div></TableCell>
                   <TableCell><div className="min-w-64 max-w-3xl"><div className="font-medium">{item.title}</div>{item.summary ? <div className="mt-1 line-clamp-2 text-sm text-muted-foreground">{item.summary}</div> : null}</div></TableCell>
                   <TableCell className="whitespace-nowrap">{item.publisher}</TableCell>
                   <TableCell className="whitespace-nowrap text-muted-foreground tabular-nums">{item.kind === '公告' ? formatDataDate(item.published_at) : formatDataTime(item.published_at)}</TableCell>
-                  <TableCell><div className="flex flex-wrap items-center gap-2"><Badge variant="outline">{evidenceSourceDisplayName(item.source)}</Badge><FreshnessStatus freshness={item.freshness} /></div></TableCell>
-                  <TableCell><Button render={<a href={item.url} target="_blank" rel="noreferrer" />} variant="ghost" size="icon-sm" aria-label={`查看${item.kind}原文`} title={`查看${item.kind}原文`}><ExternalLink /></Button></TableCell>
+                  <TableCell><div className="flex flex-wrap items-center gap-2"><Badge variant="outline">{evidenceSourceDisplayName(item.source ?? undefined)}</Badge><FreshnessStatus freshness={item.freshness ?? undefined} /></div></TableCell>
+                  <TableCell>{item.url ? <Button render={<a href={item.url} target="_blank" rel="noreferrer" />} variant="ghost" size="icon-sm" aria-label={`查看${item.kind ?? '资讯'}原文`} title={`查看${item.kind ?? '资讯'}原文`}><ExternalLink /></Button> : <span className="text-muted-foreground">—</span>}</TableCell>
                 </TableRow>)}</TableBody>
               </Table> : <EmptyState title="暂无可核验资讯" description="当前数据 API 没有返回这只股票的新闻或公告；研究结论不会假设不存在的信息。" />}
             </TabsContent>

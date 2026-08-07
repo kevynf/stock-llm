@@ -30,7 +30,7 @@ export function HistoryPage({ onOpenRun }: { onOpenRun: (runId: string) => void 
   const reduceMotion = useReducedMotion()
   const queryClient = useQueryClient()
   const [deleteRunIds, setDeleteRunIds] = useState<string[] | null>(null)
-  const runs = useQuery({ queryKey: ['runs'], queryFn: api.runs })
+  const runs = useQuery({ queryKey: ['runs'], queryFn: ({ signal }) => api.runs(signal) })
   const selection = useRowSelection(runs.data?.map((run) => run.id) ?? [])
   const deleteRun = useMutation({
     mutationFn: (ids: string[]) => ids.length === 1 ? api.deleteRun(ids[0]) : api.deleteRuns(ids),

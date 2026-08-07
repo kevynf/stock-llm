@@ -9,22 +9,22 @@ import shutil
 import threading
 import traceback
 import zipfile
-from contextlib import contextmanager
 from datetime import datetime, timezone
 from io import BytesIO
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Iterator, Literal
+from typing import Literal
 
-from .db import Database, data_dir
+from . import __version__
+from .db import Database
+from .storage import cache_write_lock, data_dir
 
 
-APP_VERSION = "0.1.2"
+APP_VERSION = __version__
 LOG_MAX_BYTES = 2 * 1024 * 1024
 LOG_BACKUP_COUNT = 5
 StorageScope = Literal["market", "external_links", "logs"]
 
-_storage_lock = threading.RLock()
 _log_lock = threading.RLock()
 _handler: RotatingFileHandler | None = None
 _logger = logging.getLogger("stockllm")
@@ -41,35 +41,6 @@ def _redact_text(value: str) -> str:
     for pattern in _secret_patterns:
         redacted = pattern.sub("[REDACTED]", redacted)
     return redacted
-
-
-@contextmanager
-def cache_write_lock() -> Iterator[None]:
-    with _storage_lock:
-        lock_path = data_dir() / ".temporary-data.lock"
-        with lock_path.open("a+b") as handle:
-            if os.name == "nt":
-                import msvcrt
-
-                handle.seek(0)
-                if handle.read(1) == b"":
-                    handle.write(b"\0")
-                    handle.flush()
-                handle.seek(0)
-                msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
-                try:
-                    yield
-                finally:
-                    handle.seek(0)
-                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-            else:
-                import fcntl
-
-                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-                try:
-                    yield
-                finally:
-                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def storage_paths() -> dict[StorageScope, Path]:
@@ -219,21 +190,6 @@ def system_diagnostics(db: Database) -> dict:
     }
 
 
-def _detailed_business_data(db: Database) -> dict:
-    with db.connect() as connection:
-        runs = [json.loads(row[0]) for row in connection.execute(
-            "SELECT payload FROM selection_runs ORDER BY created_at DESC LIMIT 50"
-        ).fetchall()]
-        chats = [dict(row) for row in connection.execute(
-            "SELECT id, created_at, run_id, stock_code FROM chats ORDER BY created_at DESC LIMIT 100"
-        ).fetchall()]
-        messages = [dict(row) for row in connection.execute(
-            "SELECT id, chat_id, role, content, created_at, tool_traces FROM chat_messages "
-            "ORDER BY created_at DESC LIMIT 500"
-        ).fetchall()]
-    return {"research_snapshots": runs, "chats": chats, "messages": messages}
-
-
 def export_diagnostics(db: Database, detail: Literal["basic", "detailed"]) -> bytes:
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -248,7 +204,7 @@ def export_diagnostics(db: Database, detail: Literal["basic", "detailed"]) -> by
         if detail == "detailed":
             archive.writestr(
                 "business-context.json",
-                json.dumps(_detailed_business_data(db), ensure_ascii=False, indent=2),
+                json.dumps(db.diagnostic_business_data(), ensure_ascii=False, indent=2),
             )
     return buffer.getvalue()
 

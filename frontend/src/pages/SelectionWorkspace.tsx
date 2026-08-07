@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Check, ChevronDown, Database, History, Play, ShieldCheck, Sparkles } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { api, eventUrl } from '../api'
@@ -34,9 +34,30 @@ const horizonOptions = [
   { value: 'short', label: '短期 1–4 周' }, { value: 'medium', label: '中期 1–6 月' }, { value: 'long', label: '长期 6 月以上' },
 ]
 const dataModeOptions = [{ value: 'latest', label: '最新数据' }, { value: 'historical', label: '历史数据' }]
+type SelectionStage = { value: number; label: string; count: string }
+const initialStage: SelectionStage = { value: 0, label: '等待开始', count: '0 / 4' }
+const selectionStages: Record<string, SelectionStage> = {
+  queued: { value: 0, label: '任务已创建', count: '0 / 4' },
+  preparing: { value: 25, label: '准备真实数据', count: '1 / 4' },
+  filtering: { value: 50, label: '排除不合适的股票', count: '2 / 4' },
+  comparing: { value: 75, label: '比较候选股票', count: '3 / 4' },
+  complete: { value: 100, label: '研究完成', count: '4 / 4' },
+}
 const riskLabels = { conservative: '稳健', balanced: '平衡', active: '积极' } as const
 const horizonLabels = { short: '短期 1–4 周', medium: '中期 1–6 月', long: '长期 6 月以上' } as const
 const strategyLabels = { trend: '趋势', quality: '质量', stability: '平稳' } as const
+
+function parseEventPayload(event: Event): Record<string, unknown> | null {
+  const data = (event as Event & { data?: unknown }).data
+  if (typeof data !== 'string') return null
+  try {
+    const payload: unknown = JSON.parse(data)
+    return payload !== null && typeof payload === 'object' ? payload as Record<string, unknown> : null
+  } catch {
+    return null
+  }
+}
+
 function HistoricalConditions({ run }: { run: SelectionRun }) {
   const [open, setOpen] = useState(false)
   const summary = `${riskLabels[run.request.risk_profile]} · ${horizonLabels[run.request.horizon]} · ${strategyLabels[run.request.strategy]} · ${formatDataDate(run.request.as_of)}`
@@ -62,6 +83,7 @@ function HistoricalConditions({ run }: { run: SelectionRun }) {
 }
 
 export function SelectionWorkspace({ onOpenResearch, onOpenChats, onRunningChange, historicalRunId }: { onOpenResearch: (code: string) => void; onOpenChats: () => void; onRunningChange?: (running: boolean) => void; historicalRunId?: string }) {
+  const queryClient = useQueryClient()
   const reduceMotion = useReducedMotion()
   const [risk, setRisk] = useState<SelectionRun['request']['risk_profile']>('balanced')
   const [horizon, setHorizon] = useState<SelectionRun['request']['horizon']>('medium')
@@ -70,8 +92,13 @@ export function SelectionWorkspace({ onOpenResearch, onOpenChats, onRunningChang
   const [dataMode, setDataMode] = useState<'latest' | 'historical'>('latest')
   const [selected, setSelected] = useState<Candidate | null>(null)
   const [runId, setRunId] = useState<string | null>(() => historicalRunId ?? null)
-  const [stage, setStage] = useState({ value: 0, label: '等待开始', count: '0 / 4' })
-  const strategies = useQuery({ queryKey: ['strategies'], queryFn: api.strategies, enabled: !historicalRunId })
+  const [stage, setStage] = useState<SelectionStage>(initialStage)
+  useEffect(() => {
+    setRunId(historicalRunId ?? null)
+    setSelected(null)
+    setStage(initialStage)
+  }, [historicalRunId])
+  const strategies = useQuery({ queryKey: ['strategies'], queryFn: ({ signal }) => api.strategies(signal), enabled: !historicalRunId })
   const createRun = useMutation({
     mutationFn: () => api.createRun({
       risk_profile: risk,
@@ -83,48 +110,76 @@ export function SelectionWorkspace({ onOpenResearch, onOpenChats, onRunningChang
     onMutate: () => {
       setRunId(null)
       setSelected(null)
-      setStage({ value: 0, label: '正在创建任务', count: '0 / 4' })
+      setStage({ ...initialStage, label: '正在创建任务' })
     },
-    onSuccess: (created) => setRunId(created.id),
+    onSuccess: (created) => {
+      queryClient.setQueryData(['selection-run', created.id], created)
+      setRunId(created.id)
+      void queryClient.invalidateQueries({ queryKey: ['runs'] })
+    },
   })
   const runQuery = useQuery({
     queryKey: ['selection-run', runId],
-    queryFn: () => api.run(runId!),
+    queryFn: ({ signal }) => api.run(runId!, signal),
     enabled: Boolean(runId),
   })
-  const run = runQuery.data ?? createRun.data
+  const run = runId
+    ? runQuery.data?.id === runId
+      ? runQuery.data
+      : createRun.data?.id === runId
+        ? createRun.data
+        : undefined
+    : undefined
   const runStatus = run?.status
   useEffect(() => {
     if (!runId || !runStatus || !['pending', 'running'].includes(runStatus)) return
     const events = new EventSource(eventUrl(`/api/v1/selection-runs/${runId}/events`))
-    const stages: Record<string, { value: number; label: string; count: string }> = {
-      queued: { value: 0, label: '任务已创建', count: '0 / 4' },
-      preparing: { value: 25, label: '准备真实数据', count: '1 / 4' },
-      filtering: { value: 50, label: '排除不合适的股票', count: '2 / 4' },
-      comparing: { value: 75, label: '比较候选股票', count: '3 / 4' },
-      complete: { value: 100, label: '研究完成', count: '4 / 4' },
+    let ended = false
+    const refreshRun = () => {
+      void Promise.all([
+        queryClient.refetchQueries({ queryKey: ['selection-run', runId], exact: true }),
+        queryClient.invalidateQueries({ queryKey: ['runs'] }),
+      ]).catch(() => undefined)
     }
-    const handleStage = (event: MessageEvent) => {
-      const payload = JSON.parse(event.data) as { stage?: string; label?: string }
-      const next = payload.stage ? stages[payload.stage] : undefined
-      if (next) setStage({ ...next, label: payload.label || next.label })
+    const handleStage = (event: Event) => {
+      const payload = parseEventPayload(event)
+      const stageName = typeof payload?.stage === 'string' ? payload.stage : undefined
+      const next = stageName ? selectionStages[stageName] : undefined
+      if (next) {
+        const label = typeof payload?.label === 'string' ? payload.label : next.label
+        setStage({ ...next, label })
+      }
     }
-    const handleFailure = (event: MessageEvent) => {
-      const payload = JSON.parse(event.data) as { message?: string }
-      setStage((current) => ({ ...current, label: payload.message || '研究未完成' }))
+    const handleFailure = (event: Event) => {
+      const payload = parseEventPayload(event)
+      if (payload) {
+        const message = typeof payload.message === 'string' ? payload.message : '研究未完成'
+        setStage((current) => ({ ...current, label: message }))
+      } else if (events.readyState !== EventSource.CLOSED) {
+        setStage((current) => ({ ...current, label: '研究进度连接中断，正在重连…' }))
+      }
     }
     const handleEnd = () => {
+      if (ended) return
+      ended = true
       events.close()
-      void runQuery.refetch()
+      refreshRun()
     }
     events.addEventListener('stage', handleStage)
-    events.addEventListener('error', handleFailure as EventListener)
+    events.addEventListener('error', handleFailure)
     events.addEventListener('end', handleEnd)
-    return () => events.close()
-  }, [runId, runStatus, runQuery.refetch])
+    return () => {
+      ended = true
+      events.close()
+    }
+  }, [queryClient, runId, runStatus])
   useEffect(() => {
-    if (runStatus === 'complete') setSelected(run?.candidates[0] ?? null)
-  }, [run, runStatus])
+    if (runStatus !== 'complete') return
+    setSelected((current) => {
+      if (current && run?.candidates.some((candidate) => candidate.code === current.code)) return current
+      return run?.candidates[0] ?? null
+    })
+  }, [run?.candidates, run?.id, runStatus])
   const preferred = useMemo(() => run?.ai_selection.top_three.find((item) => item.code === run.ai_selection.preferred_code) ?? run?.ai_selection.top_three[0], [run])
   const selectedStrategy = strategies.data?.find((item) => item.id === strategy)
   const progress = runStatus === 'complete'
@@ -135,8 +190,8 @@ export function SelectionWorkspace({ onOpenResearch, onOpenChats, onRunningChang
   const isRunning = createRun.isPending || runStatus === 'pending' || runStatus === 'running'
   useEffect(() => {
     onRunningChange?.(isRunning)
+    return () => onRunningChange?.(false)
   }, [isRunning, onRunningChange])
-  useEffect(() => () => onRunningChange?.(false), [onRunningChange])
 
   const readonly = Boolean(run || historicalRunId)
 
@@ -202,7 +257,7 @@ export function SelectionWorkspace({ onOpenResearch, onOpenChats, onRunningChang
             <Card><CardHeader><CardDescription>{run.ai_selection.status === 'complete' ? 'AI 推荐' : '当前第一名'}</CardDescription><CardTitle>{preferred?.name ?? '暂无推荐'}</CardTitle><CardAction><Badge variant="outline" className={run.ai_selection.status === 'complete' ? semanticBadgeClassName.info : semanticBadgeClassName.muted}>{run.ai_selection.status === 'complete' ? 'AI 生成' : '仅规则'}</Badge></CardAction></CardHeader><CardContent className="flex flex-col gap-4">{preferred ? <><div className="flex min-w-0 items-center justify-between gap-3"><span className="font-mono text-sm text-muted-foreground">{preferred.code}</span><Badge variant={recommendationVariant[preferred.recommendation]} className={recommendationClassName[preferred.recommendation]}>{recommendationLabel[preferred.recommendation]}</Badge></div><p className="break-words text-sm text-muted-foreground">{preferred.reason}</p></> : <p className="break-words text-sm">{run.ai_selection.summary}</p>}<Table className="min-w-[640px]"><TableHeader><TableRow><TableHead className="w-16 text-center">排名</TableHead><TableHead>候选</TableHead><TableHead>建议</TableHead><TableHead>依据</TableHead></TableRow></TableHeader><TableBody>{run.ai_selection.top_three.map((item, index) => <TableRow key={item.code} onClick={() => setSelected(run.candidates.find((candidate) => candidate.code === item.code) ?? null)} className="cursor-pointer"><TableCell className="text-center tabular-nums">{index + 1}</TableCell><TableCell><div className="flex min-w-0 flex-col"><span className="font-medium">{item.name}</span><span className="font-mono text-xs text-muted-foreground">{item.code}</span></div></TableCell><TableCell><Badge variant={recommendationVariant[item.recommendation]} className={recommendationClassName[item.recommendation]}>{recommendationLabel[item.recommendation]}</Badge></TableCell><TableCell className="max-w-[28rem] whitespace-normal break-words text-muted-foreground">{item.reason}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card>
             <ResearchChat runId={run.id} onOpenChats={onOpenChats} />
           </div></TabsContent>
-          <TabsContent value="evidence">{selected ? <Card><CardContent><Table className="min-w-[760px]"><TableHeader><TableRow><TableHead>数据项目</TableHead><TableHead className="text-right">数值</TableHead><TableHead>来源</TableHead><TableHead>数据时间</TableHead></TableRow></TableHeader><TableBody>{selected.evidence.map((item) => <TableRow key={item.id}><TableCell className="font-medium">{item.title}</TableCell><TableCell className="whitespace-nowrap text-right font-mono font-medium tabular-nums">{item.value}</TableCell><TableCell><div className="flex flex-wrap gap-2"><Badge variant="outline">{evidenceSourceDisplayName(item.source)}</Badge><ResolutionStatus resolution={item.resolution} /><FreshnessStatus freshness={item.freshness} /></div></TableCell><TableCell className="whitespace-nowrap text-muted-foreground tabular-nums">{formatEvidenceTime(item.as_of, item.fetched_at)}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card> : <Card><CardContent><EmptyState title="先选择一只股票" description="选择候选股票后，这里会显示数据来源和日期。" /></CardContent></Card>}</TabsContent>
+          <TabsContent value="evidence">{selected ? <Card><CardContent><Table className="min-w-[760px]"><TableHeader><TableRow><TableHead>数据项目</TableHead><TableHead className="text-right">数值</TableHead><TableHead>来源</TableHead><TableHead>数据时间</TableHead></TableRow></TableHeader><TableBody>{selected.evidence.map((item) => <TableRow key={item.id}><TableCell className="font-medium">{item.title}</TableCell><TableCell className="whitespace-nowrap text-right font-mono font-medium tabular-nums">{item.value}</TableCell><TableCell><div className="flex flex-wrap gap-2"><Badge variant="outline">{evidenceSourceDisplayName(item.source)}</Badge><ResolutionStatus resolution={item.resolution} /><FreshnessStatus freshness={item.freshness} /></div></TableCell><TableCell className="whitespace-nowrap text-muted-foreground tabular-nums">{formatEvidenceTime(item.as_of, item.fetched_at ?? undefined)}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card> : <Card><CardContent><EmptyState title="先选择一只股票" description="选择候选股票后，这里会显示数据来源和日期。" /></CardContent></Card>}</TabsContent>
           <TabsContent value="risk"><div className="risk-grid">{[
             { title: '关注项', items: run.ai_selection.watch_conditions, icon: Check },
             { title: '重判条件', items: run.ai_selection.invalidation_signals, icon: AlertTriangle },

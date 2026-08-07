@@ -1,7 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Clipboard, Download, ExternalLink, HardDrive, KeyRound, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react'
-import { api, openDataDirectory, type StorageScope } from '../api'
+import { api, openDataDirectory } from '../api'
+import type { StorageScope } from '../types'
 import { AIConnectionStatus } from '../components/Status'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {

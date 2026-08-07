@@ -97,6 +97,8 @@ cd stock-llm
   -NpmRegistry "https://registry.npmjs.org"
 ```
 
+如果机器上有多个 Python，可以用 `-PythonPath` 明确选择 3.12 或更高版本的解释器；已有 `.venv` 不会被脚本自动删除或替换。
+
 ## 模型服务配置
 
 StockLLM 默认使用 `https://api.deepseek.com` 和模型 `deepseek-v4-flash`。请求采用 OpenAI 兼容的 Chat Completions 格式。任何实现该格式的第三方服务都可以使用，只需在应用“设置”页填写对应的 Base URL、模型标识和 API 密钥。服务必须支持 Bearer 认证和 `/chat/completions`；候选比较还需要通过 `response_format: {"type": "json_object"}` 支持 JSON Mode。
@@ -122,7 +124,11 @@ StockLLM 使用 React 19 与 TypeScript 构建界面，FastAPI 与 SQLite 提供
 
 ## Windows 桌面版构建
 
-Windows 10/11 x64 桌面版使用 Tauri 2 加载 React，并在随机回环端口启动 PyInstaller 打包的 FastAPI sidecar。构建需要 Python 3.12、Rust MSVC target、Visual Studio C++ Build Tools、Node.js、pnpm 和项目虚拟环境。
+Windows 10/11 x64 桌面版使用 Tauri 2 加载 React，并在随机回环端口启动 PyInstaller 打包的 FastAPI sidecar。构建需要 Python 3.12 或更高版本、Rust MSVC target、Visual Studio C++ Build Tools、Node.js、pnpm 和项目虚拟环境。正式构建前可先运行无产物的前置检查：
+
+```powershell
+.\scripts\build-desktop.ps1 -PreflightOnly
+```
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass `

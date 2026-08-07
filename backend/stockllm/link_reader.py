@@ -12,8 +12,7 @@ import httpx
 from bs4 import BeautifulSoup
 from pypdf import PdfReader
 
-from .db import data_dir
-from .diagnostics import cache_write_lock
+from .storage import atomic_cache_write, data_dir, read_json_cache
 
 
 ALLOWED_HOSTS = {
@@ -134,10 +133,14 @@ def _cache_path(url: str) -> Path:
 def read_external_url(url: str) -> dict:
     url = _validate_url(url)
     cache = _cache_path(url)
-    if cache.exists():
-        modified = datetime.fromtimestamp(cache.stat().st_mtime, timezone.utc)
-        if datetime.now(timezone.utc) - modified <= timedelta(hours=24):
-            return {**json.loads(cache.read_text(encoding="utf-8")), "from_cache": True}
+    cached = read_json_cache(cache)
+    if cached is not None:
+        try:
+            modified = datetime.fromtimestamp(cache.stat().st_mtime, timezone.utc)
+        except OSError:
+            modified = None
+        if modified is not None and datetime.now(timezone.utc) - modified <= timedelta(hours=24):
+            return {**cached, "from_cache": True}
 
     try:
         timeout = httpx.Timeout(12.0, connect=6.0)
@@ -168,16 +171,18 @@ def read_external_url(url: str) -> dict:
             "fetched_at": datetime.now(timezone.utc).isoformat(),
             "from_cache": False,
         }
-        with cache_write_lock():
-            temporary = cache.with_suffix(".tmp")
+        with atomic_cache_write(cache) as temporary:
             temporary.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-            temporary.replace(cache)
         return payload
     except Exception as exc:
-        if cache.exists():
-            modified = datetime.fromtimestamp(cache.stat().st_mtime, timezone.utc)
-            if datetime.now(timezone.utc) - modified <= timedelta(days=7):
-                return {**json.loads(cache.read_text(encoding="utf-8")), "from_cache": True}
+        cached = read_json_cache(cache)
+        if cached is not None:
+            try:
+                modified = datetime.fromtimestamp(cache.stat().st_mtime, timezone.utc)
+            except OSError:
+                modified = None
+            if modified is not None and datetime.now(timezone.utc) - modified <= timedelta(days=7):
+                return {**cached, "from_cache": True}
         if isinstance(exc, LinkReadUnavailable):
             raise
         raise LinkReadUnavailable(str(exc)) from exc

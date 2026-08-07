@@ -2,9 +2,20 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
+
+
+_redirected_streams = []
+
+
+def _redirect_standard_streams() -> None:
+    for name in ("stdout", "stderr"):
+        stream = open(os.devnull, "w", encoding="utf-8")
+        setattr(sys, name, stream)
+        _redirected_streams.append(stream)
 
 
 def _startup_event(stage: str, error_type: str | None = None) -> None:
@@ -47,6 +58,7 @@ def _watch_parent() -> None:
 
 
 def main() -> None:
+    _redirect_standard_streams()
     _startup_event("entry")
     try:
         import uvicorn

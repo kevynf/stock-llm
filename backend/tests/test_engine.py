@@ -164,6 +164,63 @@ def test_zero_change_without_valid_opening_trade_uses_last_effective_daily_price
     assert row["price_note"] == "实时行情尚未形成有效成交，显示最近有效日线。"
 
 
+def test_corrupt_spot_cache_is_replaced_from_provider(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("STOCKLLM_DATA_DIR", str(tmp_path))
+    provider = object.__new__(AKShareProvider)
+    provider.cache_dir = tmp_path / "market"
+    provider.cache_dir.mkdir()
+    provider.pd = pd
+    frame = pd.DataFrame([{
+        "代码": "sh.600519", "名称": "贵州茅台", "最新价": 1500.0,
+        "涨跌幅": 1.0, "昨收": 1485.15, "今开": 1490.0,
+        "成交量": 1000, "成交额": 1_500_000, "时间戳": "15:00:00",
+    }])
+    provider.ak = type("AK", (), {"stock_zh_a_spot": staticmethod(lambda: frame)})()
+    provider._akshare_frame = lambda _fetch: frame
+    cache = provider.cache_dir / "akshare-sina-spot.parquet"
+    cache.write_bytes(b"partial parquet")
+
+    loaded, from_cache, _ = provider._spot_frame()
+
+    assert not from_cache
+    assert loaded.to_dict("records") == frame.to_dict("records")
+    assert pd.read_parquet(cache).to_dict("records") == frame.to_dict("records")
+
+
+def test_failed_spot_cache_write_keeps_previous_cache(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("STOCKLLM_DATA_DIR", str(tmp_path))
+    provider = object.__new__(AKShareProvider)
+    provider.cache_dir = tmp_path / "market"
+    provider.cache_dir.mkdir()
+    provider.pd = pd
+    required = {
+        "代码", "名称", "最新价", "涨跌幅", "昨收", "今开", "成交量", "成交额", "时间戳",
+    }
+    previous = pd.DataFrame([{
+        "代码": "sh.600519", "名称": "贵州茅台", "最新价": 1490.0,
+        "涨跌幅": 0.5, "昨收": 1482.59, "今开": 1488.0,
+        "成交量": 900, "成交额": 1_341_000, "时间戳": "14:59:00",
+    }])
+    cache = provider.cache_dir / "akshare-sina-spot.parquet"
+    previous.to_parquet(cache, index=False)
+
+    class FailingFrame:
+        empty = False
+        columns = required
+
+        def to_parquet(self, *_args, **_kwargs):
+            raise OSError("simulated cache write failure")
+
+    provider._akshare_frame = lambda _fetch: FailingFrame()
+    provider.ak = type("AK", (), {"stock_zh_a_spot": staticmethod(lambda: FailingFrame())})()
+
+    loaded, from_cache, _ = provider._spot_frame(force_refresh=True)
+
+    assert from_cache
+    assert loaded.to_dict("records") == previous.to_dict("records")
+    assert pd.read_parquet(cache).to_dict("records") == previous.to_dict("records")
+
+
 def test_research_content_keeps_source_semantics_and_respects_as_of(tmp_path) -> None:
     class StubAKShare:
         @staticmethod

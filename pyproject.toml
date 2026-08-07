@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "stockllm"
-version = "0.1.2"
+version = "0.2.0"
 description = "Local-first A-share research assistant"
 requires-python = ">=3.12"
 dependencies = [
@@ -26,6 +26,7 @@ data = [
   "pyarrow>=25,<26",
 ]
 dev = [
+  "httpx2>=2.9,<3",
   "pandas>=2.2,<4",
   "pytest>=8.4,<9",
 ]

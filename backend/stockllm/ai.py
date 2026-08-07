@@ -10,7 +10,8 @@ except ImportError:  # pragma: no cover - optional platform integration
     keyring = None
 
 from .db import Database
-from .models import AiSelection, Candidate, Confidence, RankedChoice, Recommendation, SelectionRunCreate
+from .models.common import Confidence, Recommendation
+from .models.research import AiSelection, Candidate, RankedChoice, SelectionRunCreate
 
 
 KEYRING_SERVICE = "StockLLM"
@@ -43,8 +44,8 @@ class ModelGateway:
             "model": self.db.get_setting("model.name", "deepseek-v4-flash"),
         }
 
-    def _chat(self, messages: list[dict], json_mode: bool = False) -> str:
-        key = self.get_key()
+    def _chat(self, messages: list[dict], json_mode: bool = False, api_key: str | None = None) -> str:
+        key = api_key or self.get_key()
         if not key:
             raise RuntimeError("尚未配置 DeepSeek API 密钥")
         config = self.config()
@@ -70,7 +71,13 @@ class ModelGateway:
                 watch_conditions=[], invalidation_signals=[], data_gaps=["按当前条件没有找到候选股票"],
                 summary="按当前条件没有找到可比较的股票。", status="unavailable",
             )
-        fallback = self._fallback(candidates, "DeepSeek 未配置或暂时无法连接。当前结果只根据基础检查生成。")
+        fallback = self.fallback_selection(candidates, "DeepSeek 未配置或暂时无法连接。当前结果只根据基础检查生成。")
+        connection_status = self.db.get_setting("model.connection_status", "disconnected")
+        if not os.getenv("DEEPSEEK_API_KEY") and connection_status != "connected":
+            return fallback
+        api_key = self.get_key()
+        if not api_key:
+            return fallback
         allowed = {candidate.code for candidate in candidates}
         evidence_ids = {evidence.id for candidate in candidates for evidence in candidate.evidence}
         compact = [candidate.model_dump(mode="json") for candidate in candidates[:10]]
@@ -93,6 +100,7 @@ class ModelGateway:
                 raw = self._chat(
                     [{"role": "system", "content": system}, {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)}],
                     json_mode=True,
+                    api_key=api_key,
                 )
                 result = AiSelection.model_validate_json(raw)
                 codes = {item.code for item in result.top_three}
@@ -131,7 +139,7 @@ class ModelGateway:
         return self._chat(messages)
 
     @staticmethod
-    def _fallback(candidates: list[Candidate], reason: str) -> AiSelection:
+    def fallback_selection(candidates: list[Candidate], reason: str) -> AiSelection:
         top = candidates[:3]
         choices = [
             RankedChoice(
@@ -148,3 +156,7 @@ class ModelGateway:
             invalidation_signals=["数据已经过期，或重要信息发生变化"],
             data_gaps=[reason], summary=reason, status="unavailable",
         )
+
+    @staticmethod
+    def _fallback(candidates: list[Candidate], reason: str) -> AiSelection:
+        return ModelGateway.fallback_selection(candidates, reason)
